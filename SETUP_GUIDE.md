@@ -10,7 +10,9 @@ This guide documents the setup process for running the Greek Room web API and UI
 
 ## Setup Steps
 
-### 1. Virtual Environment Setup
+> **Note**: Steps 1-7 are for **initial setup only**. Steps 8+ are for **daily usage** and will be repeated each time you want to run the system.
+
+### 1. Virtual Environment Setup (Initial Setup Only)
 
 ```bash
 cd ephesus
@@ -18,7 +20,7 @@ python3 -m venv .virtual
 source .virtual/bin/activate
 ```
 
-### 2. Fix Package Configuration
+### 2. Fix Package Configuration (Initial Setup Only)
 
 The `pyproject.toml` file needed to be updated to properly handle the package structure:
 
@@ -54,7 +56,7 @@ where = ["."]
 include = ["ephesus*"]
 ```
 
-### 3. Environment Configuration
+### 3. Environment Configuration (Initial Setup Only)
 
 Create a local environment file:
 
@@ -91,7 +93,7 @@ Update the config to use the local environment file:
 model_config = SettingsConfigDict(env_file=".env.local", extra="ignore")
 ```
 
-### 4. Docker Compose Configuration
+### 4. Docker Compose Configuration (Initial Setup Only)
 
 Configure the Docker services with proper development values:
 
@@ -186,7 +188,7 @@ OAUTH2_PROXY_PROVIDER_CA_FILE=
 OAUTH2_PROXY_UPSTREAM=http://ephesus:8000/
 ```
 
-### 5. Database Setup
+### 5. Database Setup (Initial Setup Only)
 
 Update Alembic configuration to include models:
 
@@ -208,7 +210,7 @@ mkdir -p ephesus/data/projects ephesus/data/analysis-requests
 mkdir -p ephesus/ephesus/database/alembic/versions
 ```
 
-### 6. Install Dependencies
+### 6. Install Dependencies (Initial Setup Only)
 
 ```bash
 cd ephesus
@@ -216,7 +218,7 @@ source .virtual/bin/activate
 pip install -e .
 ```
 
-### 7. Database Migration
+### 7. Database Migration (Initial Setup Only)
 
 Create and run the initial migration:
 
@@ -232,7 +234,9 @@ alembic -c ephesus/database/alembic.ini revision --autogenerate -m "Initial migr
 alembic -c ephesus/database/alembic.ini upgrade head
 ```
 
-### 8. Start Services
+### 8. Start Services (Usage after initial setup)
+
+**This section is what you'll do every time you want to run the system after initial setup.**
 
 Start the database and Redis services:
 
@@ -277,6 +281,40 @@ Once everything is running, you can verify the setup:
 - Redis is used for caching and session management
 - Keycloak and OAuth2 proxy are configured but not started by default (can be started if authentication is needed)
 - The application runs on port 8000 with auto-reload enabled for development
+
+## Quick Start (After Initial Setup)
+
+Once you've completed the initial setup (steps 1-7), here's what you need to do each time you want to run the system:
+
+```bash
+# 1. Navigate to ephesus directory
+cd ephesus
+
+# 2. Activate virtual environment
+source .virtual/bin/activate
+
+# 3. Start database and Redis services
+cd docker-compose
+docker compose up -d postgres redis
+cd ..
+
+# 4. Start the FastAPI application
+uvicorn ephesus.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+That's it! The system will be running at:
+- **Web UI**: http://localhost:8000/
+- **API Docs**: http://localhost:8000/docs
+
+## Stopping the System
+
+```bash
+# Stop the FastAPI app (Ctrl+C in the terminal where it's running)
+
+# Stop Docker services
+cd ephesus/docker-compose
+docker compose down
+```
 
 ## Troubleshooting
 
