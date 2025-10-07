@@ -4,7 +4,7 @@ This guide documents the setup process for running the Greek Room web API and UI
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.11+
 - Docker and Docker Compose
 - Git
 
