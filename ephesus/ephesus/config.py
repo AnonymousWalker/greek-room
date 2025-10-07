@@ -19,7 +19,7 @@ class EphesusSettings(BaseSettings):
 
     redis_connection_uri: str
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env.local", extra="ignore")
 
 
 @lru_cache()
