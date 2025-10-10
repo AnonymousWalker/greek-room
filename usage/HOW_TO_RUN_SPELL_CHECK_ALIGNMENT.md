@@ -3,6 +3,7 @@
 ## Complete Step-by-Step Guide
 
 ### Prerequisites
+Python 3.11+
 
 #### Replace `{user}` with your local username
 
