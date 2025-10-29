@@ -165,3 +165,4 @@ test.html
 ephesus.db
 ephesus/data/
 ephesus/.virtual/
+.virtual/
