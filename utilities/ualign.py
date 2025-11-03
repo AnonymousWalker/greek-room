@@ -494,6 +494,8 @@ class AffixMorphVariantCheck:
 
     @staticmethod
     def is_morph_variant(s1: str, s2: str, lang_code: str, d: dict):
+        if not d:
+            return False
         common_prefix, suffix1, suffix2 = AffixMorphVariantCheck.common_prefix_different_suffixes(s1, s2)
         for affix_morph_variant_check in d[(lang_code, 'suffix', suffix1, suffix2)]:
             if affix_morph_variant_check.core_suffix_exceptions:
@@ -520,7 +522,7 @@ class AlignmentModel:
     """Captures word counts, translation word counts etc. One AlignmentModel per direction (e.g. e/e_f; f/f_e)."""
     def __init__(self, name: str, lang_code: Optional[str] = None):
         self.lang_code = lang_code
-        self.affix_morph_variant_check_dict = None
+        self.affix_morph_variant_check_dict = defaultdict(list)
         self.counts = defaultdict(int)
         self.tc_counts = defaultdict(int)  # true case
         self.tc_alts = defaultdict(list)  # lower case to list of true cases

@@ -8,9 +8,9 @@ import regex
 import sys
 from ualign import DocumentConfiguration
 
-align_viz_root_dir = Path('/Users/ulf/GreekRoom/html')
-greek_room_data_root_dir = Path('/Users/ulf/projects/NLP/fast_align/data')
-uroman_pl = '/Users/ulf/projects/NLP/uroman/bin/uroman.pl'
+align_viz_root_dir = Path('/home/tony-tran/dev/greek-room/html')
+greek_room_data_root_dir = Path('/home/tony-tran/greekroom-data')
+uroman_pl = '/home/tony-tran/dev/uroman/bin/uroman.pl'  # Update this path if you have uroman installed
 
 
 def add_token_suffixes_to_token_dict(token_dict: dict[str], max_suffix_len: int = 6, min_type_count: int = 3) -> None:

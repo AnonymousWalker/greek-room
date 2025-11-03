@@ -31,11 +31,19 @@ Python 3.11+
 ### Workflow
 
 #### Step 1: Prepare Parallel Corpus
-Activate python virtual env. Then set the values for -e and -f arguments before running `run-prep.sh`:
+Activate python virtual env.
+
+Prepare a `translation-config.jsonl` file with these two objects below and use it for run-prep:
+```json
+{"id":"en-ULB","lc":"en","lang":"English"}
+{"id":"vi-ULB","lc":"vi","lang":"Vietnamese"}
+```
+Run the command below, where -c -E -F arguments are optional.
+
 ```bash
 mkdir -p /home/{user}/greekroom-data
 cd /home/{user}/greekroom-data
-./run-prep.sh -e {source_sentences_txt_file} -f {target_sentences_txt_file} -r /home/{user}/dev/greek-room/ephesus/data/vref.txt -o out
+./run-prep.sh -e {source_sentences_txt_file} -f {target_sentences_txt_file} -r /home/{user}/dev/greek-room/ephesus/data/vref.txt -c /path/to/translation-config.jsonl -E {source_id_in_config} -F {target_id_in_config} -o out
 ```
 
 **Output**: Creates tokenized and normalized files in `out/` directory
@@ -54,7 +62,7 @@ cd /home/{user}/greekroom-data
 - Each pair `i-j` means word at position i in English aligns to word at position j in Vietnamese
 
 #### Step 3: Run ualign.py
-Check the CLI arguments in run-ulaign.sh and adjust them accordingly before running
+Check the CLI arguments in run-ualign.sh and adjust them accordingly before running
 ```bash
 ./run-ualign.sh
 ```
