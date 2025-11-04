@@ -8,12 +8,10 @@
 #   -c /home/tony-tran/greekroom-data/envi-lc-config.jsonl \
 #   -E en-ULB \
 #   -F vi-ULB \
-#   -o output-EPH
 
 # --- Configurable paths ---
 DATA_DIR=/home/tony-tran/greekroom-data
 DATA_OUTPUT_DIR=$DATA_DIR/output-EPH
-VIS_OUTPUT=/home/tony-tran/greekroom-data/output-EPH-visualization
 
 BASE_VREF_FILE=/home/tony-tran/dev/greek-room/ephesus/data/vref.txt
 SMART_EDIT_DISTANCE_SRC=/home/tony-tran/dev/greek-room/smart_edit_distance/src
@@ -22,13 +20,14 @@ COST_RULES_FILE=/home/tony-tran/dev/greek-room/smart_edit_distance/data/string-d
 EXEC_DIR=/home/tony-tran/dev/greek-room/utilities
 PREP_SCRIPT=$EXEC_DIR/parallel-corpus-prep.py
 UALIGN_SCRIPT=$EXEC_DIR/ualign.py
+VIS_OUTPUT=$DATA_OUTPUT_DIR/visualization
 
 FAST_ALIGN_SRC_DIR=/home/tony-tran/dev/fast_align
 
 echo "================ PREP ================="
 cd "$DATA_DIR"
 export PYTHONPATH="$SMART_EDIT_DISTANCE_SRC"
-python "$PREP_SCRIPT" "$@" -r "$BASE_VREF_FILE"
+python "$PREP_SCRIPT" "$@" -r "$BASE_VREF_FILE -o $DATA_OUTPUT_DIR"
 
 echo "\n================ ALIGNMENT ================="
 cd "$DATA_OUTPUT_DIR"
