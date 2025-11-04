@@ -3,11 +3,13 @@
 
 # example:
 # ./run-pipeline.sh \
-#   -e en_EPH-vref.txt \
-#   -f vi-EPH-vref.txt \
+#   -e en_EPH.usfm \
+#   -f vi-EPH.usfm \
 #   -c /home/tony-tran/greekroom-data/envi-lc-config.jsonl \
 #   -E en-ULB \
 #   -F vi-ULB \
+# Note: -e and -f can accept either USFM files (.usfm, .sfm) or vref.txt files.
+#       USFM files will be automatically converted to vref.txt files.
 
 # --- Configurable paths ---
 DATA_DIR=/home/tony-tran/greekroom-data
@@ -18,7 +20,8 @@ SMART_EDIT_DISTANCE_SRC=/home/tony-tran/dev/greek-room/smart_edit_distance/src
 COST_RULES_FILE=/home/tony-tran/dev/greek-room/smart_edit_distance/data/string-distance-cost-rules.txt
 
 EXEC_DIR=/home/tony-tran/dev/greek-room/utilities
-PREP_SCRIPT=$EXEC_DIR/parallel-corpus-prep.py
+PREP_WRAPPER_SCRIPT=$EXEC_DIR/prep-with-usfm.py
+PREP_CORPUS_SCRIPT=$EXEC_DIR/parallel-corpus-prep.py
 UALIGN_SCRIPT=$EXEC_DIR/ualign.py
 VIS_OUTPUT=$DATA_OUTPUT_DIR/visualization
 
@@ -27,7 +30,8 @@ FAST_ALIGN_SRC_DIR=/home/tony-tran/dev/fast_align
 echo "================ PREP ================="
 cd "$DATA_DIR"
 export PYTHONPATH="$SMART_EDIT_DISTANCE_SRC"
-python "$PREP_SCRIPT" "$@" -r "$BASE_VREF_FILE -o $DATA_OUTPUT_DIR"
+
+python "$PREP_WRAPPER_SCRIPT" "$@" -r "$BASE_VREF_FILE" -p "$PREP_CORPUS_SCRIPT" -o "$DATA_OUTPUT_DIR"
 
 echo "\n================ ALIGNMENT ================="
 cd "$DATA_OUTPUT_DIR"
