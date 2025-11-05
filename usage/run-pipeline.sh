@@ -8,12 +8,14 @@
 #   -c /home/tony-tran/greekroom-data/envi-lc-config.jsonl \
 #   -E en-ULB \
 #   -F vi-ULB \
-# Note: -e and -f can accept either USFM files (.usfm, .sfm) or vref.txt files.
+#
+# Note: -e and -f can accept either USFM files (.usfm, .sfm) or directory.
 #       USFM files will be automatically converted to vref.txt files.
+# Note: needs to run twice to render the chapters correctly!
 
 # --- Configurable paths ---
 DATA_DIR=/home/tony-tran/greekroom-data
-DATA_OUTPUT_DIR=$DATA_DIR/output-EPH
+DATA_OUTPUT_DIR=$DATA_DIR/output
 
 BASE_VREF_FILE=/home/tony-tran/dev/greek-room/ephesus/data/vref.txt
 SMART_EDIT_DISTANCE_SRC=/home/tony-tran/dev/greek-room/smart_edit_distance/src
