@@ -222,7 +222,8 @@ def write_to_html(feedback: list, misc_data_dict: dict, corpus: general_util.Cor
             marked_up_verse = (f"{snt[:start_position]}"
                                f"<span style='color:{color};'>{snt[start_position:end_position]}</span>"
                                f"{snt[end_position:]}")
-            repeated_word_dict[repeated_word].append(marked_up_verse)
+            # store tuple of (snt_id, marked_up_verse) so we can display the reference
+            repeated_word_dict[repeated_word].append((snt_id, marked_up_verse))
             n_repeated_words += 1
     with open(html_out_filename, 'w') as f_html:
         date = f"{datetime.datetime.now():%B %-d, %Y at %-H:%M}"
@@ -258,8 +259,9 @@ def write_to_html(feedback: list, misc_data_dict: dict, corpus: general_util.Cor
                 duplicate2 = duplicate
             n_instances = len(repeated_word_dict[duplicate])
             f_html.write(f"<li> {duplicate2} ({n_instances})\n   <ul>\n")
-            for marked_up_verse in repeated_word_dict[duplicate]:
-                f_html.write(f"    <li> {marked_up_verse}\n")
+            for snt_id_vref, marked_up_verse in repeated_word_dict[duplicate]:
+                # show the snt_id (often a verse reference) before the marked-up verse
+                f_html.write(f"    <li> <nobr>[{html_util.html_title_guard(snt_id_vref)}]</nobr> {marked_up_verse}\n")
             f_html.write("    </ul>\n")
         f_html.write("</ul>\n")
         html_util.print_html_foot(f_html)

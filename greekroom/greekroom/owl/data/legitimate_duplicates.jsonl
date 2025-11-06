@@ -15,3 +15,7 @@
 {"lang-code": "hin", "text": "ले ले", "rom": "le le", "gloss": {"eng": "take it"}}
 {"lang-code": "hin", "text": "दे दे", "rom": "de de", "gloss": {"eng": "give it [to me]"}}
 {"lang-code": "hin", "text": "छः छः", "rom": "chah cha", "gloss": {"eng": "six [by] six, six each"}}
+
+
+#Vietnamese
+{"lang-code": "vi", "text": "đời đời", "rom": "doy doy", "gloss": {"eng": "everlasting, forever"}}
