@@ -46,13 +46,13 @@ if [ ! -f "$FAST_ALIGN_SRC_DIR/build/fast_align" ]; then
     exit 1
 fi
 
-awk -F' \|\|\| ' '{print $1" ||| "$2}' e_f_ref.txt > e_f_lc_noref.txt
+awk -F' \|\|\| ' '{print $1" ||| "$2}' e_f_ref.txt > e_f_lc_noref.txt 2>/dev/null
 
-"$FAST_ALIGN_SRC_DIR/build/fast_align" -i e_f_lc_noref.txt -d -o -v > forward.align
+"$FAST_ALIGN_SRC_DIR/build/fast_align" -i e_f_lc_noref.txt -d -o -v > forward.align 2>/dev/null
 
-"$FAST_ALIGN_SRC_DIR/build/fast_align" -i e_f_lc_noref.txt -d -o -v -r > reverse.align
+"$FAST_ALIGN_SRC_DIR/build/fast_align" -i e_f_lc_noref.txt -d -o -v -r > reverse.align 2>/dev/null
 
-"$FAST_ALIGN_SRC_DIR/build/atools" -i forward.align -j reverse.align -c grow-diag-final-and > align_lc
+"$FAST_ALIGN_SRC_DIR/build/atools" -i forward.align -j reverse.align -c grow-diag-final-and > align_lc 2>/dev/null
 
 echo "Done! Alignment file created: align_lc"
 
