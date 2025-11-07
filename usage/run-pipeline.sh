@@ -27,6 +27,7 @@ PREP_CORPUS_SCRIPT=$EXEC_DIR/parallel-corpus-prep.py
 UALIGN_SCRIPT=$EXEC_DIR/ualign.py
 VIS_OUTPUT=$DATA_OUTPUT_DIR/visualization
 
+# note: needs to clone fast_align repo first. See https://github.com/clab/fast_align
 FAST_ALIGN_SRC_DIR=/home/tony-tran/dev/fast_align
 
 echo "================ PREP ================="
