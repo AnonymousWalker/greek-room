@@ -17,7 +17,7 @@ import random
 import regex
 import string
 import sys
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 from greekroom.gr_utilities import general_util, html_util
 
 
@@ -291,6 +291,83 @@ def update_corpus_if_empty(corpus: general_util.Corpus, check_corpus_list: List[
     return corpus
 
 
+def process_repeated_words(
+    json_input: str,
+    lang_code: str | None = None,
+    lang_name: str | None = None,
+    *,
+    out_filename: str | None = None,
+    html_out_filename: str | None = None,
+    data_filenames: List[str] | str | None = None,
+    project_name: str | None = None,
+    corpus: general_util.Corpus | None = None,
+    verbose: int = 0
+) -> Dict[str, Any]:
+    """Run repeated words analysis programmatically.
+
+    Args:
+        json_input: Either a filename or a JSON string containing the MCP request.
+        lang_code: Language code for reporting (used when HTML output requires a fallback).
+        lang_name: Optional language name used in HTML reporting.
+        out_filename: Optional filename where JSON output should be written.
+        html_out_filename: Optional filename where HTML output should be written.
+        data_filenames: Optional override for legitimate duplicate data files.
+        project_name: Optional project identifier for HTML output.
+        corpus: Optional pre-loaded corpus for HTML rendering.
+        verbose: Verbosity level used for logging.
+
+    Returns:
+        A dictionary with the raw MCP response, extracted feedback, and misc data.
+    """
+    if data_filenames is None:
+        normalized_data_filenames = None
+    elif isinstance(data_filenames, (str, Path)):
+        normalized_data_filenames = [str(data_filenames)]
+    else:
+        normalized_data_filenames = [str(filename) for filename in data_filenames]
+
+    data_filename_dict = load_data_filename(normalized_data_filenames, verbose)
+
+    if json_input and os.path.exists(json_input):
+        with open(json_input) as f_in:
+            task_s = f_in.read()
+    else:
+        task_s = json_input
+
+    if not task_s:
+        raise ValueError("No JSON input provided for repeated words processing")
+
+    mcp_d, misc_data_dict, check_corpus_list = check_mcp(task_s, data_filename_dict, corpus, verbose)
+    feedback_list = get_feedback(mcp_d, 'GreekRoom', 'RepeatedWords') or []
+
+    if out_filename:
+        try:
+            with open(out_filename, 'w') as f_out:
+                f_out.write(f"{json.dumps(mcp_d)}\n")
+        except IOError:
+            sys.stderr.write(f"Cannot write JSON output to {out_filename}\n")
+
+    if html_out_filename:
+        if check_corpus_list is not None:
+            corpus = update_corpus_if_empty(corpus, check_corpus_list)
+        elif corpus is None:
+            raise ValueError("Corpus data is required to render HTML output")
+        if corpus is None:
+            raise ValueError("Corpus data is required to render HTML output")
+        lang_code_for_html = mcp_d.get("lang-code") or lang_code
+        write_to_html(
+            feedback_list,
+            misc_data_dict,
+            corpus,
+            html_out_filename,
+            lang_code_for_html,
+            lang_name,
+            project_name
+        )
+
+    return {"result": mcp_d, "feedback": feedback_list, "misc_data": misc_data_dict}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-j', '--json', type=str, help='input text or filename (alternative 1)')
@@ -313,7 +390,6 @@ def main():
     json_out_filename = args.out_filename
     corpus = None
     task_s = None
-    data_filename_dict = load_data_filename(args.data_filenames, verbose)
     if args.json and isinstance(args.json, str):
         if os.path.exists(args.json):
             with open(args.json) as f_in:
@@ -340,24 +416,21 @@ def main():
                   'method': 'BibleTranslationCheck',
                   'params': [param_d]}
         task_s = json.dumps(task_d)
-    mcp_d, misc_data_dict, check_corpus_list = check_mcp(task_s, data_filename_dict, corpus, verbose)
-    feedback = get_feedback(mcp_d, 'GreekRoom', 'RepeatedWords')
-    if verbose:
-        if len(feedback) > 100:
-            sys.stderr.write(f"Output: {len(feedback)} entries\n")
-        else:
-            sys.stderr.write(f"Output: {json.dumps(mcp_d)}\n")
-    if json_out_filename:
-        try:
-            with open(json_out_filename, 'w') as f_out:
-                f_out.write(f"{json.dumps(mcp_d)}\n")
-        except IOError:
-            sys.stderr.write(f"Cannot write JSON output to {json_out_filename}\n")
-    if html_out_filename:
-        corpus = update_corpus_if_empty(corpus, check_corpus_list)
-        lang_code = mcp_d.get("lang-code") or args.lang_code
-        write_to_html(feedback, misc_data_dict, corpus, html_out_filename, lang_code, lang_name,
-                      project_name or args.in_filename)
+    if task_s is None:
+        sys.stderr.write("No input provided. Use -j with JSON or -i with input filename.\n")
+        return
+
+    process_repeated_words(
+        task_s,
+        lang_code=lang_code,
+        lang_name=lang_name,
+        out_filename=json_out_filename,
+        html_out_filename=html_out_filename,
+        data_filenames=args.data_filenames,
+        project_name=project_name or args.in_filename,
+        corpus=corpus,
+        verbose=verbose
+    )
 
 
 if __name__ == "__main__":

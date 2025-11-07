@@ -8,18 +8,22 @@ This server processes USFM files through two steps:
 """
 
 import json
-import subprocess
 import tempfile
 from pathlib import Path
+import sys
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.responses import JSONResponse, HTMLResponse
+from machine.corpora import UsfmFileTextCorpus, extract_scripture_corpus
 
-# Paths to scripts (relative to project root)
 PROJECT_ROOT = Path(__file__).parent.parent
-USFM_TO_JSON_SCRIPT = PROJECT_ROOT / "utilities" / "usfm-to-json-owl.py"
-REPEATED_WORDS_SCRIPT = PROJECT_ROOT / "greekroom" / "greekroom" / "owl" / "repeated_words.py"
+PACKAGE_ROOT = PROJECT_ROOT / "greekroom"
+if str(PACKAGE_ROOT) not in sys.path:
+    sys.path.append(str(PACKAGE_ROOT))
+
+from greekroom.owl.repeated_words import process_repeated_words  # type: ignore[import]
+
 
 app = FastAPI(
     title="Greek Room USFM Conversion API",
@@ -27,6 +31,20 @@ app = FastAPI(
     version="1.0.0",
 )
 
+def _build_corpus_from_path(path: Path) -> UsfmFileTextCorpus | None:
+    """Create a Machine corpus from a USFM file or directory."""
+    if not path.exists():
+        raise HTTPException(status_code=400, detail=f"USFM path not found: {path}")
+
+    if path.is_file():
+        parent = path.parent
+        suffix = path.suffix
+        return UsfmFileTextCorpus(parent.resolve(strict=True), file_pattern=f"*{suffix}")
+
+    if path.is_dir():
+        return UsfmFileTextCorpus(path.resolve(strict=True), file_pattern="*.usfm")
+
+    return None
 
 
 
@@ -57,7 +75,7 @@ def run_usfm_to_json(
     output_json: Path
 ) -> Path:
     """
-    Run usfm-to-json-owl.py to convert USFM to JSON.
+    Convert USFM/SFM content to the JSON format expected by repeated words.
 
     Args:
         usfm_file: Path to USFM file or directory
@@ -72,32 +90,47 @@ def run_usfm_to_json(
         HTTPException: If the conversion fails
     """
     usfm_path = Path(usfm_file).resolve()
-    if not usfm_path.exists():
-        raise HTTPException(status_code=400, detail=f"USFM file not found: {usfm_file}")
-
     output_json.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        "python3",
-        str(USFM_TO_JSON_SCRIPT),
-        "-f", str(usfm_path),
-        "-c", lang_code,
-        "-n", lang_name,
-        "-o", str(output_json)
-    ]
+    corpus = _build_corpus_from_path(usfm_path)
+    if not corpus:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to create a corpus. Provide a USFM/SFM file or a directory containing USFM files."
+        )
+
+    check_corpus = []
+    try:
+        for verse_text, _, vref in extract_scripture_corpus(corpus):
+            if verse_text is not None and verse_text.strip():
+                check_corpus.append({"snt-id": str(vref), "text": verse_text})
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read USFM content: {exc}")
+
+    json_output = {
+        "jsonrpc": "2.0",
+        "id": lang_name,
+        "method": "BibleTranslationCheck",
+        "params": [{
+            "lang-code": lang_code,
+            "lang-name": lang_name,
+            "project-id": lang_name,
+            "project-name": lang_name,
+            "selectors": [{
+                "tool": "GreekRoom",
+                "checks": ["RepeatedWords"]
+            }],
+            "check-corpus": check_corpus,
+        }],
+    }
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=str(PROJECT_ROOT)
-        )
-        return output_json
-    except subprocess.CalledProcessError as e:
-        error_msg = f"USFM to JSON conversion failed: {e.stderr or e.stdout}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        with output_json.open("w", encoding="utf-8") as json_file:
+            json.dump(json_output, json_file, ensure_ascii=False, indent=1)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to write JSON output: {exc}")
+
+    return output_json
 
 
 def run_repeated_words(
@@ -126,33 +159,25 @@ def run_repeated_words(
     if not input_json.exists():
         raise HTTPException(status_code=400, detail=f"Input JSON file not found: {input_json}")
 
-    cmd = [
-        "python3",
-        str(REPEATED_WORDS_SCRIPT),
-        "-j", str(input_json),
-        "--lang_code", lang_code,
-        "--lang_name", lang_name
-    ]
+    out_filename_str = str(output_json) if output_json else None
+    html_filename_str = str(output_html) if output_html else None
 
     if output_json:
         output_json.parent.mkdir(parents=True, exist_ok=True)
-        cmd.extend(["-o", str(output_json)])
-
     if output_html:
         output_html.parent.mkdir(parents=True, exist_ok=True)
-        cmd.extend(["--html", str(output_html)])
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=str(PROJECT_ROOT)
+        process_repeated_words(
+            json_input=str(input_json),
+            lang_code=lang_code,
+            lang_name=lang_name,
+            out_filename=out_filename_str,
+            html_out_filename=html_filename_str
         )
         return output_json, output_html
-    except subprocess.CalledProcessError as e:
-        error_msg = f"Repeated words processing failed: {e.stderr or e.stdout}"
+    except Exception as e:
+        error_msg = f"Repeated words processing failed: {str(e)}"
         raise HTTPException(status_code=500, detail=error_msg)
 
 
@@ -178,7 +203,7 @@ async def convert_usfm(
     # Create temporary directory for intermediate files
     with tempfile.TemporaryDirectory(dir="/home/tony-tran/greekroom-data/temp") as temp_dir:
         temp_path = Path(temp_dir)
-        
+
         # Save uploaded file to temporary location
         uploaded_file_path = temp_path / usfm_file.filename if usfm_file.filename else temp_path / "uploaded.usfm"
         try:
@@ -187,7 +212,7 @@ async def convert_usfm(
                 f.write(content)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to save uploaded file: {str(e)}")
-        
+
         # Step 1: Convert USFM to JSON
         intermediate_json = temp_path / "owl-input.json"
         try:
