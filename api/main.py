@@ -181,9 +181,9 @@ def run_repeated_words(
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@app.post("/convert")
-async def convert_usfm(
-    usfm_file: UploadFile = File(..., description="USFM file to convert"),
+@app.post("/check-duplicates")
+async def check_duplicates(
+    usfm_file: UploadFile = File(..., description="USFM files"),
     lang_code: str = Form(..., description="Language code (e.g., 'vi', 'eng', 'ceb')"),
     lang_name: str = Form(..., description="Language name (e.g., 'Vietnamese', 'English', 'Cebuano')"),
     output_format: Literal["json", "html", "both"] = Form(
