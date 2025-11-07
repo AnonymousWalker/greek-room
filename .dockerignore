@@ -1,0 +1,13 @@
+# Ignore everything by default
+**
+
+# Allow FastAPI app and dependencies
+!api
+!api/**
+!greekroom
+!greekroom/**
+
+# Allow licensing/docs if needed at runtime
+!LICENSE
+!README.md
+

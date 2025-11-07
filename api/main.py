@@ -201,7 +201,8 @@ async def convert_usfm(
     4. Returns the requested output format(s)
     """
     # Create temporary directory for intermediate files
-    with tempfile.TemporaryDirectory(dir="/home/tony-tran/greekroom-data/temp") as temp_dir:
+    # with tempfile.TemporaryDirectory(dir="/home/tony-tran/greekroom-data/temp") as temp_dir:
+    with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
 
         # Save uploaded file to temporary location

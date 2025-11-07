@@ -24,6 +24,8 @@ RUN python -m pip install --upgrade pip \
 # Copy the entire project so FastAPI can access local packages like greekroom
 COPY . .
 
+RUN python -m pip install ./greekroom
+
 ENV PYTHONPATH=/app
 
 EXPOSE 8000
