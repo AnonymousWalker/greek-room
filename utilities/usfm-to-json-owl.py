@@ -30,8 +30,7 @@ def build_corpus_from_path(path: Path):
     # If a single file is given
     if path.is_file():
         parent = path.parent
-        suffix = path.suffix
-        return UsfmFileTextCorpus(parent.resolve(strict=True), file_pattern=f"*{suffix}")
+        return UsfmFileTextCorpus(parent.resolve(strict=True), file_pattern=path.name)
 
     # Otherwise, treat as a directory of USFM files
     if path.is_dir():

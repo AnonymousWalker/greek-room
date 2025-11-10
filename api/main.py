@@ -38,8 +38,7 @@ def _build_corpus_from_path(path: Path) -> UsfmFileTextCorpus | None:
 
     if path.is_file():
         parent = path.parent
-        suffix = path.suffix
-        return UsfmFileTextCorpus(parent.resolve(strict=True), file_pattern=f"*{suffix}")
+        return UsfmFileTextCorpus(parent.resolve(strict=True), file_pattern=path.name)
 
     if path.is_dir():
         return UsfmFileTextCorpus(path.resolve(strict=True), file_pattern="*.usfm")
