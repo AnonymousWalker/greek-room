@@ -26,7 +26,7 @@ def is_usfm_file(file_path: Path) -> bool:
     return file_path.suffix.lower() in ('.usfm', '.sfm')
 
 
-def _build_corpus_from_path(path: Path) -> Optional[UsfmFileTextCorpus]:
+def build_corpus_from_path(path: Path) -> Optional[UsfmFileTextCorpus]:
     """Return a Machine corpus given a path to a USFM file or a directory.
 
     Preference order:
@@ -70,7 +70,7 @@ def convert_usfm_to_vref(usfm_path: Path, output_dir: Path, config_id: Optional[
     
     print(f"Converting USFM file: {usfm_path} -> {vref_path}")
     
-    corpus = _build_corpus_from_path(usfm_path)
+    corpus = build_corpus_from_path(usfm_path)
     if not corpus:
         raise ValueError(
             "Unable to create a corpus. Provide a USFM/SFM file or a directory containing USFM files."

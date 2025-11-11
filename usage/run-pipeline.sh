@@ -22,7 +22,7 @@ SMART_EDIT_DISTANCE_SRC=/home/tony-tran/dev/greek-room/smart_edit_distance/src
 COST_RULES_FILE=/home/tony-tran/dev/greek-room/smart_edit_distance/data/string-distance-cost-rules.txt
 
 EXEC_DIR=/home/tony-tran/dev/greek-room/utilities
-PREP_WRAPPER_SCRIPT=$EXEC_DIR/prep-with-usfm.py
+PREP_WRAPPER_SCRIPT=$EXEC_DIR/prep_usfm.py
 PREP_CORPUS_SCRIPT=$EXEC_DIR/parallel-corpus-prep.py
 UALIGN_SCRIPT=$EXEC_DIR/ualign.py
 VIS_OUTPUT=$DATA_OUTPUT_DIR/visualization
