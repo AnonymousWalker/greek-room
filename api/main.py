@@ -21,8 +21,12 @@ PROJECT_ROOT = Path(__file__).parent.parent
 PACKAGE_ROOT = PROJECT_ROOT / "greekroom"
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.append(str(PACKAGE_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
 
 from greekroom.owl.repeated_words import process_repeated_words  # type: ignore[import]
+from utilities.prep_usfm import convert_usfm_to_vref  # type: ignore[import]
+from wildebeest import wb_analysis  # type: ignore[import]
 
 
 app = FastAPI(
@@ -54,7 +58,8 @@ async def root():
         "name": "Greek Room USFM Conversion API",
         "version": "1.0.0",
         "endpoints": {
-            "/convert": "POST - Convert USFM file to JSON/HTML",
+            "/check-duplicates": "POST - Check for duplicate/repeated words in USFM file",
+            "/wildebeest": "POST - Run Wildebeest analysis on USFM file",
             "/health": "GET - Health check",
             "/docs": "GET - API documentation"
         }
@@ -279,6 +284,92 @@ async def check_duplicates(
                 raise HTTPException(status_code=500, detail="No output files were created")
 
             return JSONResponse(content=result)
+
+
+def run_wildebeest_analysis(
+    usfm_file: Path,
+    vref_file_path: Optional[Path] = None
+) -> dict:
+    """
+    Run the Wildebeest analysis on the given USFM file and return analysis results.
+
+    Args:
+        usfm_file: Path to USFM file
+        vref_file_path: Optional path to vref.txt file. If not provided, uses default.
+
+    Returns:
+        Dictionary containing the Wildebeest analysis results
+
+    Raises:
+        HTTPException: If the processing fails
+    """
+    # Use default vref.txt path if not provided
+    if vref_file_path is None:
+        vref_file_path = PROJECT_ROOT / "ephesus" / "data" / "vref.txt"
+    
+    if not vref_file_path.exists():
+        raise HTTPException(
+            status_code=500,
+            detail=f"VREF file not found: {vref_file_path}"
+        )
+
+    try:
+        # Convert USFM to vref format
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            vref_text_path = convert_usfm_to_vref(usfm_file, temp_path)
+            
+            # Load reference IDs
+            ref_id_dict = wb_analysis.load_ref_ids(str(vref_file_path))
+            
+            # Run Wildebeest analysis and get the result object
+            wb = wb_analysis.process(
+                in_file=str(vref_text_path),
+                ref_id_dict=ref_id_dict,
+            )
+            
+            # Return the analysis dictionary
+            return wb.analysis
+    except Exception as e:
+        error_msg = f"Wildebeest analysis failed: {str(e)}"
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+@app.post("/wildebeest")
+async def wildebeest_analysis(
+    usfm_file: UploadFile = File(..., description="USFM file to analyze")
+):
+    """
+    Run Wildebeest analysis on a USFM file.
+
+    This endpoint:
+    1. Accepts an uploaded USFM file
+    2. Converts the USFM file to vref format
+    3. Runs Wildebeest analysis
+    4. Returns the analysis results as JSON
+
+    Args:
+        usfm_file: Uploaded USFM file
+
+    Returns:
+        JSON response with Wildebeest analysis results (wb.analysis object)
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        # Save uploaded file to temporary location
+        uploaded_file_path = temp_path / (usfm_file.filename if usfm_file.filename else "uploaded.usfm")
+        try:
+            with uploaded_file_path.open("wb") as f:
+                content = await usfm_file.read()
+                f.write(content)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to save uploaded file: {str(e)}")
+
+        analysis_result = run_wildebeest_analysis(
+            usfm_file=uploaded_file_path
+        )
+        return JSONResponse(content=analysis_result)
 
 
 if __name__ == "__main__":
