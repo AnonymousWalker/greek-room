@@ -58,8 +58,8 @@ async def root():
         "name": "Greek Room USFM Conversion API",
         "version": "1.0.0",
         "endpoints": {
-            "/check-duplicates": "POST - Check for duplicate/repeated words in USFM file",
-            "/wildebeest": "POST - Run Wildebeest analysis on USFM file",
+            "/check-duplicates": "POST - Check for duplicate/repeated words in USFM file(s)",
+            "/wildebeest": "POST - Run Wildebeest analysis on USFM file(s)",
             "/health": "GET - Health check",
             "/docs": "GET - API documentation"
         }
@@ -73,7 +73,7 @@ async def health():
 
 
 def run_usfm_to_json(
-    usfm_file: str,
+    usfm_path: Path,
     lang_code: str,
     lang_name: str,
     output_json: Path
@@ -93,7 +93,6 @@ def run_usfm_to_json(
     Raises:
         HTTPException: If the conversion fails
     """
-    usfm_path = Path(usfm_file).resolve()
     output_json.parent.mkdir(parents=True, exist_ok=True)
 
     corpus = _build_corpus_from_path(usfm_path)
@@ -187,7 +186,7 @@ def run_repeated_words(
 
 @app.post("/check-duplicates")
 async def check_duplicates(
-    usfm_file: UploadFile = File(..., description="USFM files"),
+    usfm_files: list[UploadFile] = File(..., description="USFM files (one or more)"),
     lang_code: str = Form(..., description="Language code (e.g., 'vi', 'eng', 'ceb')"),
     lang_name: str = Form(..., description="Language name (e.g., 'Vietnamese', 'English', 'Cebuano')"),
     output_format: Literal["json", "html", "both"] = Form(
@@ -196,11 +195,11 @@ async def check_duplicates(
     )
 ):
     """
-    Convert USFM file to JSON or HTML format.
+    Convert USFM file(s) to JSON or HTML format.
 
     This endpoint:
-    1. Accepts an uploaded USFM file
-    2. Converts the USFM file to JSON using usfm-to-json-owl.py
+    1. Accepts one or more uploaded USFM files
+    2. Converts the USFM file(s) to JSON using usfm-to-json-owl.py
     3. Processes the JSON through repeated_words.py
     4. Returns the requested output format(s)
     """
@@ -209,20 +208,28 @@ async def check_duplicates(
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
 
-        # Save uploaded file to temporary location
-        uploaded_file_path = temp_path / usfm_file.filename if usfm_file.filename else temp_path / "uploaded.usfm"
+        # Save uploaded files to temporary location
+        usfm_dir = temp_path / "usfm_files"
+        usfm_dir.mkdir(exist_ok=True)
+        
+        if not usfm_files:
+            raise HTTPException(status_code=400, detail="At least one USFM file must be provided")
+        
         try:
-            with uploaded_file_path.open("wb") as f:
-                content = await usfm_file.read()
-                f.write(content)
+            for usfm_file in usfm_files:
+                filename = usfm_file.filename if usfm_file.filename else "uploaded.usfm"
+                uploaded_file_path = usfm_dir / filename
+                with uploaded_file_path.open("wb") as f:
+                    content = await usfm_file.read()
+                    f.write(content)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to save uploaded file: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Failed to save uploaded file(s): {str(e)}")
 
         # Step 1: Convert USFM to JSON
         intermediate_json = temp_path / "owl-input.json"
         try:
             run_usfm_to_json(
-                usfm_file=str(uploaded_file_path),
+                usfm_path=usfm_dir,
                 lang_code=lang_code,
                 lang_name=lang_name,
                 output_json=intermediate_json
@@ -287,14 +294,14 @@ async def check_duplicates(
 
 
 def run_wildebeest_analysis(
-    usfm_file: Path,
+    usfm_path: Path,
     vref_file_path: Optional[Path] = None
 ) -> dict:
     """
     Run the Wildebeest analysis on the given USFM file and return analysis results.
 
     Args:
-        usfm_file: Path to USFM file
+        usfm_path: Path to USFM file or directory
         vref_file_path: Optional path to vref.txt file. If not provided, uses default.
 
     Returns:
@@ -317,7 +324,7 @@ def run_wildebeest_analysis(
         # Convert USFM to vref format
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            vref_text_path = convert_usfm_to_vref(usfm_file, temp_path)
+            vref_text_path = convert_usfm_to_vref(usfm_path, temp_path)
             
             # Load reference IDs
             ref_id_dict = wb_analysis.load_ref_ids(str(vref_file_path))
@@ -337,19 +344,19 @@ def run_wildebeest_analysis(
 
 @app.post("/wildebeest")
 async def wildebeest_analysis(
-    usfm_file: UploadFile = File(..., description="USFM file to analyze")
+    usfm_files: list[UploadFile] = File(..., description="USFM files to analyze (one or more)")
 ):
     """
-    Run Wildebeest analysis on a USFM file.
+    Run Wildebeest analysis on USFM file(s).
 
     This endpoint:
-    1. Accepts an uploaded USFM file
-    2. Converts the USFM file to vref format
+    1. Accepts one or more uploaded USFM files
+    2. Converts the USFM file(s) to vref format
     3. Runs Wildebeest analysis
     4. Returns the analysis results as JSON
 
     Args:
-        usfm_file: Uploaded USFM file
+        usfm_files: Uploaded USFM file(s)
 
     Returns:
         JSON response with Wildebeest analysis results (wb.analysis object)
@@ -357,17 +364,25 @@ async def wildebeest_analysis(
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
 
-        # Save uploaded file to temporary location
-        uploaded_file_path = temp_path / (usfm_file.filename if usfm_file.filename else "uploaded.usfm")
+        # Save uploaded files to temporary location
+        usfm_dir = temp_path / "usfm_files"
+        usfm_dir.mkdir(exist_ok=True)
+        
+        if not usfm_files:
+            raise HTTPException(status_code=400, detail="At least one USFM file must be provided")
+        
         try:
-            with uploaded_file_path.open("wb") as f:
-                content = await usfm_file.read()
-                f.write(content)
+            for usfm_file in usfm_files:
+                filename = usfm_file.filename if usfm_file.filename else "uploaded.usfm"
+                uploaded_file_path = usfm_dir / filename
+                with uploaded_file_path.open("wb") as f:
+                    content = await usfm_file.read()
+                    f.write(content)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to save uploaded file: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Failed to save uploaded file(s): {str(e)}")
 
         analysis_result = run_wildebeest_analysis(
-            usfm_file=uploaded_file_path
+            usfm_path=usfm_dir
         )
         return JSONResponse(content=analysis_result)
 
