@@ -48,7 +48,7 @@
 			"class_name": "MyContainer",
 			"image": "../api/Dockerfile",
 			"image_build_context": "..",
-			"max_instances": 10
+			"max_instances": 2
 		}
 	],
 	"durable_objects": {
