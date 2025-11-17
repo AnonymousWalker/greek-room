@@ -200,7 +200,7 @@ def run_wildebeest_analysis(
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-def upload_to_r2(
+def upload_to_blob_storage(
     file_path: Path,
     object_key: str,
     bucket_name: str,

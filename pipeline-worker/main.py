@@ -4,6 +4,8 @@ CLI entry point for the Service Bus listener worker.
 
 This script runs the Service Bus listener as a standalone process,
 receiving messages from the WACSEvent topic and processing them.
+
+Usage: `op run --env-file=".env.op" -- python main.py`
 """
 
 import asyncio
