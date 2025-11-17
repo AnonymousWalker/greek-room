@@ -21,7 +21,7 @@ import requests
 from azure.servicebus.aio import ServiceBusClient
 from azure.servicebus.exceptions import ServiceBusError
 
-from utils import run_duplicate_check, run_wildebeest_analysis, upload_to_r2
+from utilities.api_utils import run_duplicate_check, run_wildebeest_analysis, upload_to_r2
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -161,7 +161,7 @@ class ServiceBusListener:
             repo_url = f"{parsed_url.scheme}://{parsed_url.netloc}/api/v1/repos/{user}/{repo}/archive/{default_branch}.zip"
             
             # Download and extract the repository
-            with tempfile.TemporaryDirectory(dir="/home/tony-tran/greekroom-data/temp") as tempdir:
+            with tempfile.TemporaryDirectory() as tempdir:
                 with tempfile.NamedTemporaryFile(delete=False) as download_file:
                     download_path = download_file.name
                 
@@ -190,7 +190,6 @@ class ServiceBusListener:
                     if not dirs:
                         raise Exception(f"No directories found in extracted archive for {user}/{repo}")
                     repo_dir = dirs[0]
-                    logger.info(f"Found repository directory: {repo_dir}")
                     
                     wildebeest_results = run_wildebeest_analysis(repo_dir)                    
                     wildebeest_result_path = tempdir_path / "wildebeest-results.json"
@@ -219,6 +218,8 @@ class ServiceBusListener:
                         R2_ACCESS_KEY_ID,
                         R2_SECRET_ACCESS_KEY
                     )
+
+                    logger.info(f"Uploaded analysis results to R2 for {user}/{repo}")
                 finally:
                     # Clean up the download file
                     if os.path.exists(download_path):
