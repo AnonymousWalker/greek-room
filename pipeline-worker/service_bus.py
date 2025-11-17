@@ -194,6 +194,7 @@ class ServiceBusListener:
                         raise Exception(f"No directories found in extracted archive for {user}/{repo}")
                     repo_dir = dirs[0]
                     
+                    # Run Wildebeest analysis
                     wildebeest_results = run_wildebeest_analysis(repo_dir)                    
                     wildebeest_result_path = tempdir_path / "wildebeest-results.json"
                     with open(wildebeest_result_path, 'w', encoding='utf-8') as f:
@@ -201,13 +202,13 @@ class ServiceBusListener:
                     logger.info(f"Wildebeest results saved to {wildebeest_result_path}")
                     
                     # Run duplicate check
-                    duplicate_result_path = tempdir_path / "duplicate-check-output.json"
+                    duplicate_result_path = tempdir_path / "duplicate-check-output.html"
                     run_duplicate_check(repo_dir, "", "", duplicate_result_path)
                     logger.info(f"Duplicate results saved to {duplicate_result_path}")
 
                     # Define object keys for R2 storage
                     wildebeest_object_key = f"{user}/{repo}/wildebeest-results.json"
-                    duplicate_object_key = f"{user}/{repo}/duplicate-check-output.json"
+                    duplicate_object_key = f"{user}/{repo}/duplicate-check-output.html"
 
                     upload_to_blob_storage(
                         wildebeest_result_path, 

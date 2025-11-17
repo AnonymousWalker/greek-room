@@ -148,7 +148,7 @@ def run_duplicate_check(usfm_path: Path, lang_code: str, lang_name: str, output_
     with tempfile.TemporaryDirectory() as temp_dir:
         intermediate_json = Path(temp_dir) / "owl-input.json"
         run_usfm_to_json(usfm_path, lang_code, lang_name, intermediate_json)
-        run_repeated_words(intermediate_json, lang_code, lang_name, output_path)
+        run_repeated_words(intermediate_json, lang_code, lang_name, output_html=output_path)
 
 
 def run_wildebeest_analysis(
