@@ -17,6 +17,8 @@ from typing import Optional
 
 from fastapi import HTTPException
 from machine.corpora import UsfmFileTextCorpus, extract_scripture_corpus
+import boto3
+from botocore.exceptions import ClientError, BotoCoreError
 
 PROJECT_ROOT = Path(__file__).parent.parent
 PACKAGE_ROOT = PROJECT_ROOT / "greekroom"
@@ -116,22 +118,7 @@ def run_repeated_words(
     output_json: Optional[Path] = None,
     output_html: Optional[Path] = None
 ) -> tuple[Optional[Path], Optional[Path]]:
-    """
-    Run repeated_words.py to process JSON and generate output.
 
-    Args:
-        input_json: Path to input JSON file
-        lang_code: Language code
-        lang_name: Language name
-        output_json: Optional path to output JSON file
-        output_html: Optional path to output HTML file
-
-    Returns:
-        Tuple of (output_json_path, output_html_path)
-
-    Raises:
-        HTTPException: If the processing fails
-    """
     if not input_json.exists():
         raise HTTPException(status_code=400, detail=f"Input JSON file not found: {input_json}")
 
@@ -155,6 +142,13 @@ def run_repeated_words(
     except Exception as e:
         error_msg = f"Repeated words processing failed: {str(e)}"
         raise HTTPException(status_code=500, detail=error_msg)
+
+
+def run_duplicate_check(usfm_path: Path, lang_code: str, lang_name: str, output_path: Path):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        intermediate_json = Path(temp_dir) / "owl-input.json"
+        run_usfm_to_json(usfm_path, lang_code, lang_name, intermediate_json)
+        run_repeated_words(intermediate_json, lang_code, lang_name, output_path)
 
 
 def run_wildebeest_analysis(
@@ -203,5 +197,61 @@ def run_wildebeest_analysis(
             return wb.analysis
     except Exception as e:
         error_msg = f"Wildebeest analysis failed: {str(e)}"
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+def upload_to_r2(
+    file_path: Path,
+    object_key: str,
+    bucket_name: str,
+    endpoint_url: str,
+    access_key: str,
+    secret_key: str
+) -> str:
+    """
+    Upload a file to Cloudflare R2 bucket.
+
+    Args:
+        file_path: Path to the local file to upload
+        object_key: The key (path) where the file will be stored in R2
+        bucket_name: Name of the R2 bucket
+        endpoint_url: R2 endpoint URL (e.g., https://<account-id>.r2.cloudflarestorage.com)
+        access_key: R2 access key ID
+        secret_key: R2 secret access key
+
+    Returns:
+        The object URL or key of the uploaded file
+
+    Raises:
+        HTTPException: If the upload fails
+    """
+    if not file_path.exists():
+        raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
+
+    try:
+        # Create S3-compatible client for R2
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+        # Upload the file
+        s3_client.upload_file(
+            str(file_path),
+            bucket_name,
+            object_key,
+        )
+
+        return object_key
+
+    except ClientError as e:
+        error_msg = f"Failed to upload to R2: {e.response.get('Error', {}).get('Message', str(e))}"
+        raise HTTPException(status_code=500, detail=error_msg)
+    except BotoCoreError as e:
+        error_msg = f"R2 connection error: {str(e)}"
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Unexpected error uploading to R2: {str(e)}"
         raise HTTPException(status_code=500, detail=error_msg)
 

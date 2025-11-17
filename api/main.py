@@ -8,20 +8,80 @@ This server processes USFM files through two steps:
 """
 
 import json
+import logging
+import os
 import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.responses import JSONResponse, HTMLResponse
 
+from service_bus import ServiceBusListener
 from utils import run_usfm_to_json, run_repeated_words, run_wildebeest_analysis
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Service Bus configuration
+SERVICE_BUS_CONNECTION_STRING = os.getenv("SERVICE_BUS_CONNECTION_STRING")
+if not SERVICE_BUS_CONNECTION_STRING:
+    raise ValueError("SERVICE_BUS_CONNECTION_STRING is not set")
+    
+TOPIC_NAME = "WACSEvent"
+SUBSCRIPTION_NAME = "GreekRoom"
+
+# Global service bus listener instance
+service_bus_listener: ServiceBusListener | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage the application lifespan - startup and shutdown events."""
+    # Startup
+    global service_bus_listener
+    
+    logger.info("Starting FastAPI application...")
+    
+    # Initialize and start Service Bus listener
+    if SERVICE_BUS_CONNECTION_STRING and SERVICE_BUS_CONNECTION_STRING != "xxx":
+        try:
+            service_bus_listener = ServiceBusListener(
+                connection_string=SERVICE_BUS_CONNECTION_STRING,
+                topic_name=TOPIC_NAME,
+                subscription_name=SUBSCRIPTION_NAME
+            )
+            await service_bus_listener.start()
+            logger.info("Service Bus listener started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start Service Bus listener: {e}")
+            # Continue even if Service Bus fails to start
+    else:
+        logger.warning(
+            "Service Bus connection string not configured. "
+            "Set SERVICE_BUS_CONNECTION_STRING to enable Service Bus listener."
+        )
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down FastAPI application...")
+    
+    if service_bus_listener:
+        try:
+            await service_bus_listener.stop()
+            logger.info("Service Bus listener stopped")
+        except Exception as e:
+            logger.error(f"Error stopping Service Bus listener: {e}")
 
 
 app = FastAPI(
     title="Greek Room USFM Conversion API",
     description="API for converting USFM files to JSON/HTML format using repeated words analysis",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
