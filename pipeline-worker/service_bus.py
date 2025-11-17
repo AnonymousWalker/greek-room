@@ -184,9 +184,7 @@ class ServiceBusListener:
                     # Extract the zip file
                     with zipfile.ZipFile(download_path) as repo_zip:
                         repo_zip.extractall(tempdir)
-                    
-                    logger.info(f"Successfully downloaded and extracted {user}/{repo} to {tempdir}")
-                    
+                                        
                     # Find the first folder inside the extracted path
                     tempdir_path = Path(tempdir)
                     dirs = [d for d in tempdir_path.iterdir() if d.is_dir()]
