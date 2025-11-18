@@ -7,7 +7,7 @@
 !greekroom
 !greekroom/**
 
-# Allow utilities needed by FastAPI
+# Allow utilities
 !utilities
 !utilities/**
 
