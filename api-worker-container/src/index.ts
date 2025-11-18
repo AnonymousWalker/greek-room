@@ -5,7 +5,6 @@ import { env } from "cloudflare:workers";
 export class MyContainer extends Container<Env> {
 	// FastAPI listens on port 8000 inside the container
 	defaultPort = 8000;
-	sleepAfter = "2m";
 	envVars = {
 		// pass the secret (provided at runtime by Cloudflare Worker)
 		STORAGE_ENDPOINT: (env as any).STORAGE_ENDPOINT,
