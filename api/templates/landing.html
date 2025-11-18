@@ -69,16 +69,19 @@
 </head>
 <body>
     <div class="container">
-        <h1>{{ user }}/{{ repo }}</h1>
+        <h1>
+            Greek Room Analysis of
+            <span style="color: #021a85; font-family: monospace; font-size: 1.05em;">{{ user }}/{{ repo }}</span>
+        </h1>
         
         {% if duplicate_check_available %}
             <a href="{{ duplicate_check_url }}" class="item available">
-                <div class="item-title">Duplicates Report</div>
+                <div class="item-title">Duplicates Check</div>
                 <div class="item-description">Report of duplicated words in the translation.</div>
             </a>
         {% else %}
             <div class="item unavailable">
-                <div class="item-title">Duplicates Report (not available)</div>
+                <div class="item-title">Duplicates Check (not available)</div>
                 <div class="item-description">Report of duplicated words in the translation.</div>
             </div>
         {% endif %}

@@ -216,10 +216,10 @@ async def wildebeest_analysis(
         return JSONResponse(content=analysis_result)
 
 
-@app.get("/{user}/{repo}")
-async def landing(user: str, repo: str, request: Request):
+@app.get("/view/{user}/{repo}")
+async def view_results(user: str, repo: str, request: Request):
     """
-    Landing page for the front end.
+    Front end for viewing the results of Greek Room analysis.
     
     Args:
         user: User identifier
