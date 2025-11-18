@@ -9,12 +9,19 @@ This server processes USFM files through two steps:
 
 import json
 import logging
+import os
+import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import Literal
-
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from typing import Literal, Optional
+import requests
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Query, Request
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
 from utilities.api_utils import run_usfm_to_json, run_repeated_words, run_wildebeest_analysis
 
@@ -22,13 +29,16 @@ from utilities.api_utils import run_usfm_to_json, run_repeated_words, run_wildeb
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Setup Jinja2 templates
+BASE_PATH = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(BASE_PATH / "templates"))
+STORAGE_ENDPOINT = os.getenv("STORAGE_ENDPOINT")
 
 app = FastAPI(
     title="Greek Room USFM Conversion API",
     description="API for converting USFM files to JSON/HTML format using repeated words analysis",
     version="1.0.0",
 )
-
 
 
 @app.get("/")
@@ -200,11 +210,55 @@ async def wildebeest_analysis(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to save uploaded file(s): {str(e)}")
 
-        analysis_result = run_wildebeest_analysis(
+        analysis_result, ref_id_dict = run_wildebeest_analysis(
             usfm_path=usfm_dir
         )
         return JSONResponse(content=analysis_result)
 
+
+@app.get("/{user}/{repo}")
+async def landing(user: str, repo: str, request: Request):
+    """
+    Landing page for the front end.
+    
+    Args:
+        user: User identifier
+        repo: Repository identifier
+    """
+    if not STORAGE_ENDPOINT:
+        raise HTTPException(status_code=500, detail="STORAGE_ENDPOINT not configured")
+    
+    # Check availability of files via HEAD requests
+    duplicate_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/duplicate-check-output.html"
+    wildebeest_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/wildebeest-results.html"
+    
+    duplicate_check_available = False
+    wildebeest_results_available = False
+    
+    try:
+        response = requests.head(duplicate_check_url, timeout=5)
+        duplicate_check_available = response.status_code == 200
+    except Exception as e:
+        logger.warning(f"HEAD request failed for duplicate-check: {e}")
+    
+    try:
+        response = requests.head(wildebeest_results_url, timeout=5)
+        wildebeest_results_available = response.status_code == 200
+    except Exception as e:
+        logger.warning(f"HEAD request failed for wildebeest-results: {e}")
+    
+    return templates.TemplateResponse(
+        "landing.html",
+        {
+            "request": request,
+            "user": user,
+            "repo": repo,
+            "duplicate_check_available": duplicate_check_available,
+            "wildebeest_results_available": wildebeest_results_available,
+            "duplicate_check_url": duplicate_check_url,
+            "wildebeest_results_url": wildebeest_results_url,
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

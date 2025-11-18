@@ -7,6 +7,7 @@ Topics and Subscriptions.
 """
 
 import asyncio
+from datetime import datetime
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import requests
+from jinja2 import Environment, FileSystemLoader
 
 from azure.servicebus import ServiceBusMessage
 from azure.servicebus.aio import ServiceBusClient
@@ -193,10 +195,24 @@ class ServiceBusListener:
                     repo_dir = dirs[0]
                     
                     # Run Wildebeest analysis
-                    wildebeest_results = run_wildebeest_analysis(repo_dir)                    
-                    wildebeest_result_path = tempdir_path / "wildebeest-results.json"
+                    wildebeest_results, ref_id_dict = run_wildebeest_analysis(repo_dir)
+                    
+                    # Render HTML template
+                    template_dir = Path(__file__).parent
+                    env = Environment(loader=FileSystemLoader(str(template_dir)))
+                    template = env.get_template('analysis.html')
+                    
+                    html_content = template.render(
+                        wb_analysis_data=wildebeest_results,
+                        repo_name=f"{user}/{repo}",
+                        report_create_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        ref_id_dict=ref_id_dict
+                    )
+                    
+                    # Write HTML file instead of JSON
+                    wildebeest_result_path = tempdir_path / "wildebeest-results.html"
                     with open(wildebeest_result_path, 'w', encoding='utf-8') as f:
-                        json.dump(wildebeest_results, f, ensure_ascii=False, indent=2)
+                        f.write(html_content)
                     logger.info(f"Wildebeest results saved to {wildebeest_result_path}")
                     
                     # Run duplicate check
@@ -205,7 +221,7 @@ class ServiceBusListener:
                     logger.info(f"Duplicate results saved to {duplicate_result_path}")
 
                     # Define object keys for R2 storage
-                    wildebeest_object_key = f"{user}/{repo}/wildebeest-results.json"
+                    wildebeest_object_key = f"{user}/{repo}/wildebeest-results.html"
                     duplicate_object_key = f"{user}/{repo}/duplicate-check-output.html"
 
                     upload_to_blob_storage(

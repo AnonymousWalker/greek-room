@@ -1,11 +1,7 @@
-fastapi
-uvicorn[standard]
 pydantic
-python-multipart
 sil-machine==1.7.0
 wildebeest-nlp==0.9.2
 azure-servicebus
 requests
 boto3
 jinja2
-

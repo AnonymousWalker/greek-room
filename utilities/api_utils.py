@@ -154,7 +154,7 @@ def run_duplicate_check(usfm_path: Path, lang_code: str, lang_name: str, output_
 def run_wildebeest_analysis(
     usfm_path: Path,
     vref_file_path: Optional[Path] = None
-) -> dict:
+) -> tuple[dict, dict]:
     """
     Run the Wildebeest analysis on the given USFM file and return analysis results.
 
@@ -163,7 +163,7 @@ def run_wildebeest_analysis(
         vref_file_path: Optional path to vref.txt file. If not provided, uses default.
 
     Returns:
-        Dictionary containing the Wildebeest analysis results
+        Tuple of (analysis dictionary, ref_id_dict)
 
     Raises:
         HTTPException: If the processing fails
@@ -193,8 +193,8 @@ def run_wildebeest_analysis(
                 ref_id_dict=ref_id_dict,
             )
             
-            # Return the analysis dictionary
-            return wb.analysis
+            # Return the analysis dictionary and ref_id_dict
+            return wb.analysis, ref_id_dict
     except Exception as e:
         error_msg = f"Wildebeest analysis failed: {str(e)}"
         raise HTTPException(status_code=500, detail=error_msg)
