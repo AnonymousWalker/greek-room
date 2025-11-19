@@ -23,6 +23,9 @@ RUN python -m pip install --upgrade pip \
 # Copy the entire project so the worker can access local packages like greekroom and utilities
 COPY . .
 
+# Remove any Python cache files that might have been copied (safety measure)
+RUN find /app -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
+
 RUN python -m pip install ./greekroom
 
 ENV PYTHONPATH=/app \
