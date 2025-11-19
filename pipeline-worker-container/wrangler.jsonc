@@ -1,6 +1,5 @@
 /**
  * Cloudflare Worker configuration for pipeline-worker background service.
- * This worker runs a container that continuously listens to Azure Service Bus.
  * 
  * For more details on how to configure Wrangler, refer to:
  * https://developers.cloudflare.com/workers/wrangler/configuration/
@@ -17,8 +16,13 @@
 		"enabled": true
 	},
 	/**
+	 * Scheduled cron trigger to periodically wake the container and keep it alive.
+	 */
+	"triggers": {
+		"crons": ["*/30 * * * *"]
+	},
+	/**
 	 * Container configuration for the Python background listener service.
-	 * The container runs continuously to maintain Azure Service Bus connection.
 	 */
 	"containers": [
 		{

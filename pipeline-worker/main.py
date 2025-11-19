@@ -25,6 +25,9 @@ if str(PIPELINE_WORKER_DIR) not in sys.path:
 
 from service_bus import ServiceBusListener
 
+# Add simple HTTP server for health checks
+from aiohttp import web
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +41,11 @@ TOPIC_NAME = "WACSEvent"
 SUBSCRIPTION_NAME = "GreekRoom"
 
 
+async def health_check(request):
+    """Simple health check endpoint to keep container alive."""
+    return web.Response(text="OK", status=200)
+
+
 async def main():
     """Main entry point for the Service Bus listener."""
     if not SERVICE_BUS_CONNECTION_STRING:
@@ -49,6 +57,18 @@ async def main():
         topic_name=TOPIC_NAME,
         subscription_name=SUBSCRIPTION_NAME
     )
+    
+    # Set up simple HTTP server for health checks (keeps container alive)
+    app = web.Application()
+    app.router.add_get('/health', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Start health check server on port 8080 (Cloudflare Containers standard)
+    port = int(os.getenv("PORT", "8080"))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logger.info(f"Health check server started on port {port}")
     
     # Set up signal handlers for graceful shutdown
     shutdown_event = asyncio.Event()
@@ -75,6 +95,7 @@ async def main():
         sys.exit(1)
     finally:
         await listener.stop()
+        await runner.cleanup()
         logger.info("Service Bus listener stopped.")
 
 

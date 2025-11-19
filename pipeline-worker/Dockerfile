@@ -25,7 +25,10 @@ COPY . .
 
 RUN python -m pip install ./greekroom
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app \
+    PORT=8080
+
+EXPOSE 8080
 
 CMD ["python", "pipeline-worker/main.py"]
 

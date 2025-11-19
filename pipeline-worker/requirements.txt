@@ -5,3 +5,4 @@ azure-servicebus
 requests
 boto3
 jinja2
+aiohttp
