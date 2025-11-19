@@ -112,8 +112,8 @@ async def check_duplicates(
                 lang_name=lang_name,
                 output_json=intermediate_json
             )
-        except HTTPException:
-            raise
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Unexpected error in USFM conversion: {str(e)}")
 
@@ -134,8 +134,8 @@ async def check_duplicates(
                 output_json=output_json_path,
                 output_html=output_html_path
             )
-        except HTTPException:
-            raise
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Unexpected error in repeated words processing: {str(e)}")
 
@@ -210,9 +210,15 @@ async def wildebeest_analysis(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to save uploaded file(s): {str(e)}")
 
-        analysis_result, ref_id_dict = run_wildebeest_analysis(
-            usfm_path=usfm_dir
-        )
+        try:
+            analysis_result, ref_id_dict = run_wildebeest_analysis(
+                usfm_path=usfm_dir
+            )
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Unexpected error in Wildebeest analysis: {str(e)}")
+        
         return JSONResponse(content=analysis_result)
 
 

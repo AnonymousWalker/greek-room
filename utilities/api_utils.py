@@ -15,7 +15,6 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import HTTPException
 from machine.corpora import UsfmFileTextCorpus, extract_scripture_corpus
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
@@ -35,7 +34,7 @@ from wildebeest import wb_analysis  # type: ignore[import]
 def build_corpus_from_path(path: Path) -> UsfmFileTextCorpus | None:
     """Create a Machine corpus from a USFM file or directory."""
     if not path.exists():
-        raise HTTPException(status_code=400, detail=f"USFM path not found: {path}")
+        raise FileNotFoundError(f"USFM path not found: {path}")
 
     if path.is_file():
         parent = path.parent
@@ -66,15 +65,14 @@ def run_usfm_to_json(
         Path to the created JSON file
 
     Raises:
-        HTTPException: If the conversion fails
+        ValueError: If the conversion fails
     """
     output_json.parent.mkdir(parents=True, exist_ok=True)
 
     corpus = build_corpus_from_path(usfm_path)
     if not corpus:
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to create a corpus. Provide a USFM/SFM file or a directory containing USFM files."
+        raise ValueError(
+            "Unable to create a corpus. Provide a USFM/SFM file or a directory containing USFM files."
         )
 
     check_corpus = []
@@ -83,7 +81,7 @@ def run_usfm_to_json(
             if verse_text is not None and verse_text.strip():
                 check_corpus.append({"snt-id": str(vref), "text": verse_text})
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read USFM content: {exc}")
+        raise RuntimeError(f"Failed to read USFM content: {exc}") from exc
 
     json_output = {
         "jsonrpc": "2.0",
@@ -106,7 +104,7 @@ def run_usfm_to_json(
         with output_json.open("w", encoding="utf-8") as json_file:
             json.dump(json_output, json_file, ensure_ascii=False, indent=1)
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write JSON output: {exc}")
+        raise RuntimeError(f"Failed to write JSON output: {exc}") from exc
 
     return output_json
 
@@ -120,7 +118,7 @@ def run_repeated_words(
 ) -> tuple[Optional[Path], Optional[Path]]:
 
     if not input_json.exists():
-        raise HTTPException(status_code=400, detail=f"Input JSON file not found: {input_json}")
+        raise FileNotFoundError(f"Input JSON file not found: {input_json}")
 
     out_filename_str = str(output_json) if output_json else None
     html_filename_str = str(output_html) if output_html else None
@@ -141,7 +139,7 @@ def run_repeated_words(
         return output_json, output_html
     except Exception as e:
         error_msg = f"Repeated words processing failed: {str(e)}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise RuntimeError(error_msg) from e
 
 
 def run_duplicate_check(usfm_path: Path, lang_code: str, lang_name: str, output_path: Path):
@@ -166,17 +164,14 @@ def run_wildebeest_analysis(
         Tuple of (analysis dictionary, ref_id_dict)
 
     Raises:
-        HTTPException: If the processing fails
+        RuntimeError: If the processing fails
     """
     # Use default vref.txt path if not provided
     if vref_file_path is None:
         vref_file_path = PROJECT_ROOT / "ephesus" / "data" / "vref.txt"
     
     if not vref_file_path.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"VREF file not found: {vref_file_path}"
-        )
+        raise FileNotFoundError(f"VREF file not found: {vref_file_path}")
 
     try:
         # Convert USFM to vref format
@@ -197,7 +192,7 @@ def run_wildebeest_analysis(
             return wb.analysis, ref_id_dict
     except Exception as e:
         error_msg = f"Wildebeest analysis failed: {str(e)}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise RuntimeError(error_msg) from e
 
 
 def upload_to_blob_storage(
@@ -223,10 +218,10 @@ def upload_to_blob_storage(
         The object URL or key of the uploaded file
 
     Raises:
-        HTTPException: If the upload fails
+        RuntimeError: If the upload fails
     """
     if not file_path.exists():
-        raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
 
     try:
         # Create S3-compatible client for R2
@@ -247,11 +242,11 @@ def upload_to_blob_storage(
 
     except ClientError as e:
         error_msg = f"Failed to upload to R2: {e.response.get('Error', {}).get('Message', str(e))}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise RuntimeError(error_msg) from e
     except BotoCoreError as e:
         error_msg = f"R2 connection error: {str(e)}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise RuntimeError(error_msg) from e
     except Exception as e:
         error_msg = f"Unexpected error uploading to R2: {str(e)}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise RuntimeError(error_msg) from e
 
