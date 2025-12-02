@@ -204,7 +204,7 @@ def upload_to_blob_storage(
     secret_key: str
 ) -> str:
     """
-    Upload a file to Cloudflare R2 bucket.
+    Upload a file to Cloudflare R2 bucket. Default content type is text/html.
 
     Args:
         file_path: Path to the local file to upload
@@ -236,6 +236,7 @@ def upload_to_blob_storage(
             str(file_path),
             bucket_name,
             object_key,
+            ExtraArgs={'ContentType': 'text/html'}
         )
 
         return object_key
