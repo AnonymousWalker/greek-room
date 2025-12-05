@@ -42,5 +42,5 @@ ENV PYTHONPATH=/app \
 
 EXPOSE 8080
 
-CMD ["python", "pipeline-worker/main.py"]
+CMD ["python", "pipeline-worker/webhook.py"]
 
