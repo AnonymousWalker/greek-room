@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 
-
 @dataclass
 class AlignmentConfig:
     """Configuration for alignment pipeline execution.
@@ -23,6 +22,7 @@ class AlignmentConfig:
     config_path: str
 
 
+
 # Default configuration instance with default values
 default_config = AlignmentConfig(
     e_lang_name="English",
@@ -34,3 +34,49 @@ default_config = AlignmentConfig(
     config_path="/home/tony-tran/greekroom-data/envi-lc-config.jsonl"
 )
 
+
+# Sample YAML file:    
+# dublin_core:
+#   conformsto: 'rc0.2'
+#   contributor:
+#     - "Vietnamgl1"
+#     - "Vietnamgl2"
+#     - "Vietnamgl3"
+#     - "Vietnamgl4"
+#     - 'Tri M Dang'
+#     - 'VGM - Vietnamese translation team'
+#   creator: 'Wycliffe Associates'
+#   description: 'An unrestricted literal Bible'
+#   format: 'text/usfm'
+#   identifier: 'ulb'
+#   issued: '2024-01-18'
+#   language:
+#     identifier: 'vi'
+#     title: "Tiếng Việt"
+#     direction: 'ltr'
+#   modified: '2024-01-19'
+#   publisher: 'WA'
+#   relation:
+#     - 'vi/tw'
+#     - 'vi/tq'
+#     - 'vi/tn'
+#   rights: 'CC BY-SA 4.0'
+#   source:
+#     -
+#       identifier: 'ulb'
+#       language: 'en'
+#       version: '6'
+#   subject: 'Bible'
+#   title: 'Vietnamese Unlocked Literal Bible'
+#   type: 'bundle'
+#   version: '6.7'
+
+# checking:
+#   checking_entity:
+#     - 'Tri M Dang'
+#     - 'Vietnamese translation team'
+#   checking_level: '3'
+
+#config example:
+# {"id":"en-ULB","lc":"en","lang":"English"}
+# {"id":"vi-ULB","lc":"vi","lang":"Vietnamese"}
