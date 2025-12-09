@@ -168,7 +168,8 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
             R2_BUCKET_NAME,
             R2_STORAGE_ENDPOINT,
             R2_ACCESS_KEY_ID,
-            R2_SECRET_ACCESS_KEY
+            R2_SECRET_ACCESS_KEY,
+            "application/zip"
         )
         logger.info(f"Alignment result saved to {alignment_object_key}")
 

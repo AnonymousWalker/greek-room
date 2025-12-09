@@ -201,7 +201,8 @@ def upload_to_blob_storage(
     bucket_name: str,
     endpoint_url: str,
     access_key: str,
-    secret_key: str
+    secret_key: str,
+    content_type: str = "text/html",
 ) -> str:
     """
     Upload a file to Cloudflare R2 bucket. Default content type is text/html.
@@ -213,6 +214,7 @@ def upload_to_blob_storage(
         endpoint_url: R2 endpoint URL (e.g., https://<account-id>.r2.cloudflarestorage.com)
         access_key: R2 access key ID
         secret_key: R2 secret access key
+        content_type: MIME type for the uploaded object. Defaults to text/html.
 
     Returns:
         The object URL or key of the uploaded file
@@ -236,7 +238,7 @@ def upload_to_blob_storage(
             str(file_path),
             bucket_name,
             object_key,
-            ExtraArgs={'ContentType': 'text/html'}
+            ExtraArgs={'ContentType': content_type}
         )
 
         return object_key
