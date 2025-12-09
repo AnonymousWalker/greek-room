@@ -7,12 +7,15 @@ with payloads similar to the message structure processed by
 ServiceBusListener._process_message().
 """
 
+import json
 import os
+import re
+import zipfile
 from datetime import datetime
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from git import Repo
@@ -99,9 +102,9 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
     repo = message.get("Repo")
     tempdir_path = Path(tempdir)
     
+    os.chdir(tempdir_path)
+    Repo.clone_from(repo_html_url, str(repo))
     repo_dir = tempdir_path / repo
-    repo_dir.mkdir(parents=True, exist_ok=True)
-    Repo.clone_from(repo_html_url, str(repo_dir))
     
     wildebeest_results, ref_id_dict = run_wildebeest_analysis(repo_dir)
     
@@ -155,10 +158,10 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
     logger.info(f"Duplicate result saved to: {duplicate_result_path}")
 
     if repo != "en_ulb": # only run alignment for repos other than en_ulb
+        alignment_dir = tempdir_path / "alignment"
+        os.makedirs(str(alignment_dir), exist_ok=True)
         source_repo_dir = tempdir_path / "en_ulb"
         Repo.clone_from("https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git", str(source_repo_dir))
-        alignment_dir = tempdir_path / "alignment"
-        alignment_dir.mkdir(parents=True, exist_ok=True)
         output_path = run_alignment(source_repo_dir, repo_dir, str(alignment_dir))
 
         alignment_object_key = f"{user}/{repo}/alignment.zip"
@@ -171,6 +174,36 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
             R2_SECRET_ACCESS_KEY,
             "application/zip"
         )
+
+        index = {}
+        zip_splits = split_alignment_zip_by_prefix(output_path, alignment_dir)
+        for zip_split in zip_splits:
+            upload_to_blob_storage(
+                zip_split, 
+                f"{user}/{repo}/alignments/{zip_split.stem}.zip",
+                R2_BUCKET_NAME,
+                R2_STORAGE_ENDPOINT,
+                R2_ACCESS_KEY_ID,
+                R2_SECRET_ACCESS_KEY,
+                "application/zip"
+            )
+            index[zip_split.stem] = f"{user}/{repo}/alignments/{zip_split.stem}.zip"
+
+        # upload index.json
+        index_json_path = alignment_dir / "index.json"
+        with open(index_json_path, 'w') as f:
+            json.dump(index, f)
+        
+        upload_to_blob_storage(
+            index_json_path, 
+            f"{user}/{repo}/alignments/index.json",
+            R2_BUCKET_NAME,
+            R2_STORAGE_ENDPOINT,
+            R2_ACCESS_KEY_ID,
+            R2_SECRET_ACCESS_KEY,
+            "application/json"
+        )
+
         logger.info(f"Alignment result saved to {alignment_object_key}")
 
 
@@ -180,6 +213,57 @@ def run_alignment(source_repo_path: str, target_repo_path: str, temp_dir: str) -
     output = pipeline.run()
     logger.info(f"Alignment completed.")
     return output
+
+
+def split_alignment_zip_by_prefix(zip_path: Path, output_dir: Path) -> List[Path]:
+    """
+    Split an alignment zip file into multiple zip files grouped by three-letter prefix.
+    The original zip contains files like:
+    - visualization/1CH-001.html
+    - visualization/EXO-002.html
+    
+    This function creates separate zip files for each three-letter prefix (e.g., 1CH, EXO).
+    """
+    os.makedirs(str(output_dir), exist_ok=True)
+    
+    pattern = re.compile(r'visualization/(\w{3})-\d{3}\.html')    
+    prefix_groups: Dict[str, List[tuple]] = {}
+    other_files: List[tuple] = []
+    
+    # Read the original zip and group files by prefix
+    with zipfile.ZipFile(zip_path, 'r') as source_zip:
+        for file_info in source_zip.infolist():
+            filename = file_info.filename
+            match = pattern.match(filename)
+            
+            if match:
+                prefix = match.group(1)
+                if prefix not in prefix_groups:
+                    prefix_groups[prefix] = []
+
+                file_data = source_zip.read(filename)
+                prefix_groups[prefix].append((filename, file_info, file_data))
+    
+    # Create a zip file for each prefix group
+    zip_splits: List[Path] = []
+    
+    for prefix, files in prefix_groups.items():
+        zip_filename = output_dir / f"{prefix}.zip"
+        
+        with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as prefix_zip:
+            # Add all files for this prefix
+            for filename, file_info, file_data in files:
+                prefix_zip.writestr(file_info, file_data)
+            
+            # Also include non-visualization files (e.g., spell-check files) in each prefix zip
+            for filename, file_info, file_data in other_files:
+                prefix_zip.writestr(file_info, file_data)
+        
+        zip_splits.append(zip_filename)
+    
+    logger.info(f"Split alignment zip into {len(zip_splits)} files by prefix")
+    return zip_splits
+
 
 if __name__ == "__main__":
     import uvicorn

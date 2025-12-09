@@ -276,10 +276,12 @@ async def view_results(user: str, repo: str, request: Request):
         }
     )
 
+
 @app.get("/view/{user}/{repo}/alignment/{chapter_file}")
 def view_alignment_results(user: str, repo: str, chapter_file: str, request: Request):
     """
     View alignment results. Default chapter should be requested as /alignment/default.
+    Example chapter_file: "GEN-001.html"
     """
     return _serve_alignment_html(user, repo, chapter_file)
 
@@ -320,9 +322,23 @@ def _extract_html_from_zip(zip_file_path: Path, chapter_file: str) -> str | None
 
 
 def _serve_alignment_html(user: str, repo: str, chapter_file: str) -> HTMLResponse:    
+    # Download index.json
+    index_json_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignments/index.json"
+    response = requests.get(index_json_url, timeout=30)
+    response.raise_for_status()
+    index_json = response.json()
 
-    alignment_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignment.zip"
-    response = requests.get(alignment_results_url, timeout=30)
+    if chapter_file == "default":
+        # default to the first entry in index.json
+        alignment_file_object_key = next(iter(index_json.values()))
+    else:
+        # get the book zip file from index
+        book_id = chapter_file.split("-")[0]
+        alignment_file_object_key = index_json[book_id]
+    
+    alignment_results_url = f"{STORAGE_ENDPOINT}/{alignment_file_object_key}"
+    
+    response = requests.get(alignment_results_url, timeout=10)
     response.raise_for_status()
 
     # Download zip to temporary file
@@ -331,6 +347,7 @@ def _serve_alignment_html(user: str, repo: str, chapter_file: str) -> HTMLRespon
         temp_zip_path = Path(temp_zip.name)
 
         html_content = _extract_html_from_zip(temp_zip_path, chapter_file)
+        
         if html_content is None:
             raise HTTPException(status_code=404, detail="Chapter HTML not found in alignment zip")
 
