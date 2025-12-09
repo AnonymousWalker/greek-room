@@ -97,6 +97,17 @@
                 <div class="item-description">Analysis of character-level abnormalities.</div>
             </div>
         {% endif %}
+        {% if alignment_results_available %}
+            <a href="{{ alignment_results_url }}" class="item available">
+                <div class="item-title">Alignment Results</div>
+                <div class="item-description">Visualization of the alignment results.</div>
+            </a>
+        {% else %}
+            <div class="item unavailable">
+                <div class="item-title">Alignment Results (not available)</div>
+                <div class="item-description">Visualization of the alignment results.</div>
+            </div>
+        {% endif %}
     </div>
 </body>
 </html>

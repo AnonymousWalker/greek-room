@@ -151,36 +151,34 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
 
     wildebeest_result_url = f"{BLOB_OUTPUT_PREFIX}/{wildebeest_object_key}"
     duplicate_result_url = f"{BLOB_OUTPUT_PREFIX}/{duplicate_object_key}"
-    logger.info(f"Wildebeest result URL: {wildebeest_result_url}")
-    logger.info(f"Duplicate result URL: {duplicate_result_url}")
+    logger.info(f"Wildebeest result saved to: {wildebeest_result_path}")
+    logger.info(f"Duplicate result saved to: {duplicate_result_path}")
 
-    # run_alignment(source_repo_dir, repo_dir)
+    if repo != "en_ulb": # only run alignment for repos other than en_ulb
+        source_repo_dir = tempdir_path / "en_ulb"
+        Repo.clone_from("https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git", str(source_repo_dir))
+        alignment_dir = tempdir_path / "alignment"
+        alignment_dir.mkdir(parents=True, exist_ok=True)
+        output_path = run_alignment(source_repo_dir, repo_dir, str(alignment_dir))
 
-
-@app.post("/debug-alignment")
-def debug():
-    source_repo_url = "https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git"
-    target_repo_url = "https://content.bibletranslationtools.org/WA-Catalog/vi_ulb.git"
-    
-    with tempfile.TemporaryDirectory() as base_temp_dir:
-        base_path = Path(base_temp_dir)
-        source_repo_path = base_path / "en_ulb"
-        target_repo_path = base_path / "vi_ulb"
-        
-        Repo.clone_from(source_repo_url, str(source_repo_path))
-        Repo.clone_from(target_repo_url, str(target_repo_path))
-        
-        run_alignment(str(source_repo_path), str(target_repo_path))
-        
-        return JSONResponse(status_code=200, content={"status": "completed"})
+        alignment_object_key = f"{user}/{repo}/alignment.zip"
+        upload_to_blob_storage(
+            output_path, 
+            alignment_object_key,
+            R2_BUCKET_NAME,
+            R2_STORAGE_ENDPOINT,
+            R2_ACCESS_KEY_ID,
+            R2_SECRET_ACCESS_KEY
+        )
+        logger.info(f"Alignment result saved to {alignment_object_key}")
 
 
-def run_alignment(source_repo_path: str, target_repo_path: str):
-    with tempfile.TemporaryDirectory() as temp_dir:
-        config = AlignmentPipeline.load_config_from_repos(source_repo_path, target_repo_path, temp_dir=temp_dir)
-        pipeline = AlignmentPipeline(config=config, temp_dir=temp_dir)
-        pipeline.run()
-        logger.info(f"Pipeline completed. Check outputs: {temp_dir}")
+def run_alignment(source_repo_path: str, target_repo_path: str, temp_dir: str) -> Path:
+    config = AlignmentPipeline.load_config_from_repos(source_repo_path, target_repo_path, temp_dir=temp_dir)
+    pipeline = AlignmentPipeline(config=config, temp_dir=temp_dir)
+    output = pipeline.run()
+    logger.info(f"Alignment completed.")
+    return output
 
 if __name__ == "__main__":
     import uvicorn

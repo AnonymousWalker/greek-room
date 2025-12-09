@@ -15,6 +15,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
+import zipfile
 import requests
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Query, Request
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -237,6 +238,7 @@ async def view_results(user: str, repo: str, request: Request):
     # Check availability of files via HEAD requests
     duplicate_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/duplicate-check-output.html"
     wildebeest_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/wildebeest-results.html"
+    alignment_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignment.zip"
     
     duplicate_check_available = False
     wildebeest_results_available = False
@@ -252,6 +254,12 @@ async def view_results(user: str, repo: str, request: Request):
         wildebeest_results_available = response.status_code == 200
     except Exception as e:
         logger.warning(f"HEAD request failed for wildebeest-results: {e}")
+
+    try:
+        response = requests.head(alignment_results_url, timeout=5)
+        alignment_results_available = response.status_code == 200
+    except Exception as e:
+        logger.warning(f"HEAD request failed for alignment-results: {e}")
     
     return templates.TemplateResponse(
         "landing.html",
@@ -263,8 +271,72 @@ async def view_results(user: str, repo: str, request: Request):
             "wildebeest_results_available": wildebeest_results_available,
             "duplicate_check_url": duplicate_check_url,
             "wildebeest_results_url": wildebeest_results_url,
+            "alignment_results_available": alignment_results_available,
+            "alignment_results_url": f"/view/{user}/{repo}/alignment/default",
         }
     )
+
+@app.get("/view/{user}/{repo}/alignment/{chapter_file}")
+def view_alignment_results(user: str, repo: str, chapter_file: str, request: Request):
+    """
+    View alignment results. Default chapter should be requested as /alignment/default.
+    """
+    return _serve_alignment_html(user, repo, chapter_file)
+
+
+def _extract_html_from_zip(zip_file_path: Path, chapter_file: str) -> str | None:
+    """
+    Extract an HTML file from a zip archive on disk.
+    
+    Args:
+        zip_file_path: Path to the zip file
+        chapter_file: The name of the chapter file to extract (e.g., "GEN-001.html").
+    """
+    try:
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_file:
+            if not chapter_file or chapter_file == "default":
+                # pick any HTML file under visualization/
+                file_path = next(
+                    (
+                        name for name in zip_file.namelist()
+                        if name.startswith("visualization/") and (
+                            name.lower().endswith("001.html") or name.lower().endswith(".html")
+                        )
+                    ),
+                    None
+                )
+                if not file_path:
+                    return None
+            else:
+                file_path = f"visualization/{chapter_file}"
+                if file_path not in zip_file.namelist():
+                    return None
+            
+            return zip_file.read(file_path).decode('utf-8')
+
+    except Exception as e:
+        logger.error(f"Error extracting HTML from zip: {e}", exc_info=True)
+        return None
+
+
+def _serve_alignment_html(user: str, repo: str, chapter_file: str) -> HTMLResponse:    
+
+    alignment_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignment.zip"
+    response = requests.get(alignment_results_url, timeout=30)
+    response.raise_for_status()
+
+    # Download zip to temporary file
+    with tempfile.NamedTemporaryFile(delete=True, suffix='.zip') as temp_zip:
+        temp_zip.write(response.content)
+        temp_zip_path = Path(temp_zip.name)
+
+        html_content = _extract_html_from_zip(temp_zip_path, chapter_file)
+        if html_content is None:
+            raise HTTPException(status_code=404, detail="Chapter HTML not found in alignment zip")
+
+        return HTMLResponse(content=html_content)
+
+    
 
 if __name__ == "__main__":
     import uvicorn

@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import json
+import zipfile
 import yaml
 import tempfile
 from pathlib import Path
@@ -319,14 +320,32 @@ class AlignmentPipeline:
         print(f"  - Log: {self.DATA_OUTPUT_DIR / 'log-ualign.txt'}")
         print(f"  - Model: {self.DATA_OUTPUT_DIR / 'model.txt'}")
 
+    def _compress_output_dir(self):
+        """Compress the VIS_OUTPUT directory into a .zip file."""
+        zip_file = self.DATA_OUTPUT_DIR / "visualization-output.zip"
+        with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as zipf:
+            for file in self.VIS_OUTPUT.rglob('*'):
+                if file.is_file():
+                    zipf.write(file, file.relative_to(self.DATA_OUTPUT_DIR))
+            
+            # Include spell-check HTML files if they exist
+            battery_e = self.DATA_OUTPUT_DIR / "battery-e.html"
+            battery_f = self.DATA_OUTPUT_DIR / "battery-f.html"
+            if battery_e.exists():
+                zipf.write(battery_e, "src-spellings.html")
+            if battery_f.exists():
+                zipf.write(battery_f, "tgt-spellings.html")
+        return zip_file
     
-    def run(self) -> None:
+    def run(self) -> Path:
         """Run the complete pipeline: prep -> alignment -> ualign."""
         self._run_prep_step()
         self._run_alignment_step()
         self._run_ualign_step()
+        self._run_ualign_step() # run again to render the chapters availability
+        return self._compress_output_dir()
 
-
+        
 def main(source_repo_path: str, target_repo_path: str):
     """Main entry point for the pipeline script.
     
