@@ -239,27 +239,28 @@ async def view_results(user: str, repo: str, request: Request):
     duplicate_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/duplicate-check-output.html"
     wildebeest_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/wildebeest-results.html"
     alignment_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignment.zip"
+    tgt_spell_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/tgt-spellings.html"
     
     duplicate_check_available = False
     wildebeest_results_available = False
-    
+    alignment_results_available = False
+    tgt_spell_check_available = False
+
     try:
         response = requests.head(duplicate_check_url, timeout=5)
         duplicate_check_available = response.status_code == 200
-    except Exception as e:
-        logger.warning(f"HEAD request failed for duplicate-check: {e}")
-    
-    try:
+
         response = requests.head(wildebeest_results_url, timeout=5)
         wildebeest_results_available = response.status_code == 200
-    except Exception as e:
-        logger.warning(f"HEAD request failed for wildebeest-results: {e}")
 
-    try:
         response = requests.head(alignment_results_url, timeout=5)
         alignment_results_available = response.status_code == 200
+
+        response = requests.head(tgt_spell_check_url, timeout=5)
+        tgt_spell_check_available = response.status_code == 200
+
     except Exception as e:
-        logger.warning(f"HEAD request failed for alignment-results: {e}")
+        logger.warning(f"HEAD request failed for one or more resources: {e}")
     
     return templates.TemplateResponse(
         "landing.html",
@@ -273,6 +274,8 @@ async def view_results(user: str, repo: str, request: Request):
             "wildebeest_results_url": wildebeest_results_url,
             "alignment_results_available": alignment_results_available,
             "alignment_results_url": f"/view/{user}/{repo}/alignment/default",
+            "tgt_spell_check_available": tgt_spell_check_available,
+            "tgt_spell_check_url": tgt_spell_check_url,
         }
     )
 

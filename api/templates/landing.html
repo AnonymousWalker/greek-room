@@ -104,8 +104,19 @@
             </a>
         {% else %}
             <div class="item unavailable">
-                <div class="item-title">Alignment Results (not available)</div>
-                <div class="item-description">Visualization of the alignment results.</div>
+                <div class="item-title">World Alignment Visualization (not available)</div>
+                <div class="item-description">Visualization of the alignment of the translation with the original text.</div>
+            </div>
+        {% endif %}
+        {% if tgt_spell_check_available %}
+            <a href="{{ tgt_spell_check_url }}" class="item available">
+                <div class="item-title">Spell Checking</div>
+                <div class="item-description">Spell checking results for the translation.</div>
+            </a>
+        {% else %}
+            <div class="item unavailable">
+                <div class="item-title">Spell Checking (not available)</div>
+                <div class="item-description">Spell checking results for the translation.</div>
             </div>
         {% endif %}
     </div>

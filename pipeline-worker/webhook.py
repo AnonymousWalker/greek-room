@@ -162,11 +162,11 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
         os.makedirs(str(alignment_dir), exist_ok=True)
         source_repo_dir = tempdir_path / "en_ulb"
         Repo.clone_from("https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git", str(source_repo_dir))
-        output_path = run_alignment(source_repo_dir, repo_dir, str(alignment_dir))
+        alignment_output_path = run_alignment(source_repo_dir, repo_dir, str(alignment_dir))
 
         alignment_object_key = f"{user}/{repo}/alignment.zip"
         upload_to_blob_storage(
-            output_path, 
+            alignment_output_path, 
             alignment_object_key,
             R2_BUCKET_NAME,
             R2_STORAGE_ENDPOINT,
@@ -175,8 +175,9 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
             "application/zip"
         )
 
+        # Upload splits of the large alignment zip
         index = {}
-        zip_splits = split_alignment_zip_by_prefix(output_path, alignment_dir)
+        zip_splits = split_alignment_zip_by_prefix(alignment_output_path, alignment_dir)
         for zip_split in zip_splits:
             upload_to_blob_storage(
                 zip_split, 
@@ -204,6 +205,23 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
             "application/json"
         )
 
+        # upload spell-check result
+        tgt_spelling_file = alignment_dir / "tgt-spellings.html"
+        extract_file_from_zip(
+            alignment_output_path, 
+            "tgt-spellings.html",
+            tgt_spelling_file
+        )
+
+        upload_to_blob_storage(
+            tgt_spelling_file, 
+            f"{user}/{repo}/tgt-spellings.html",
+            R2_BUCKET_NAME,
+            R2_STORAGE_ENDPOINT,
+            R2_ACCESS_KEY_ID,
+            R2_SECRET_ACCESS_KEY,
+            "text/html"
+        )
         logger.info(f"Alignment result saved to {alignment_object_key}")
 
 
@@ -263,6 +281,14 @@ def split_alignment_zip_by_prefix(zip_path: Path, output_dir: Path) -> List[Path
     
     logger.info(f"Split alignment zip into {len(zip_splits)} files by prefix")
     return zip_splits
+
+
+def extract_file_from_zip(zip_path: Path, filename: str, output_path: Path):
+    """Extract a specific file from a zip archive to a target file path."""
+    with zipfile.ZipFile(zip_path, 'r') as zip_file:
+        file_content = zip_file.read(filename)
+        with open(output_path, 'wb') as f:
+            f.write(file_content)
 
 
 if __name__ == "__main__":

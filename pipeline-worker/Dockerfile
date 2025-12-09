@@ -17,6 +17,14 @@ RUN apt-get update \
         cmake \
     && rm -rf /var/lib/apt/lists/*
 
+# Clone and build fast_align (before COPY to improve layer caching)
+RUN git clone https://github.com/clab/fast_align.git /opt/fast_align \
+    && cd /opt/fast_align \
+    && mkdir -p build \
+    && cd build \
+    && cmake .. \
+    && make
+
 # Install Python dependencies first to leverage Docker layer caching
 COPY pipeline-worker/requirements.txt /tmp/pipeline-worker-requirements.txt
 RUN python -m pip install --upgrade pip \
@@ -26,14 +34,6 @@ RUN python -m pip install --upgrade pip \
 COPY . .
 
 RUN python -m pip install ./greekroom
-
-# Clone and build fast_align
-RUN git clone https://github.com/clab/fast_align.git /opt/fast_align \
-    && cd /opt/fast_align \
-    && mkdir -p build \
-    && cd build \
-    && cmake .. \
-    && make
 
 ENV PYTHONPATH=/app \
     ROOT_DIR=/app \
