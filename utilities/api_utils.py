@@ -30,6 +30,13 @@ from greekroom.owl.repeated_words import process_repeated_words  # type: ignore[
 from utilities.prep_usfm import convert_usfm_to_vref  # type: ignore[import]
 from wildebeest import wb_analysis  # type: ignore[import]
 
+# Storage output file names
+DUPLICATE_CHECK_OUTPUT_FILENAME = "duplicate-check-output.html"
+WILDEBEEST_RESULTS_FILENAME = "wildebeest-results.html"
+ALIGNMENT_RESULTS_FILENAME = "alignment.zip"
+TGT_SPELLINGS_FILENAME = "tgt-spellings.html"
+INDEX_JSON = "index.json"
+
 
 def build_corpus_from_path(path: Path) -> UsfmFileTextCorpus | None:
     """Create a Machine corpus from a USFM file or directory."""

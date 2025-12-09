@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from alignment_config import AlignmentConfig, default_config
+from utilities.api_utils import TGT_SPELLINGS_FILENAME
 
 
 ROOT_DIR = Path(os.getenv("ROOT_DIR", "/home/tony-tran/dev/greek-room"))
@@ -334,7 +335,7 @@ class AlignmentPipeline:
             if battery_e.exists():
                 zipf.write(battery_e, "src-spellings.html")
             if battery_f.exists():
-                zipf.write(battery_f, "tgt-spellings.html")
+                zipf.write(battery_f, TGT_SPELLINGS_FILENAME)
         return zip_file
     
     def run(self) -> Path:

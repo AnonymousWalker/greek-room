@@ -21,7 +21,16 @@ from fastapi.responses import JSONResponse
 from git import Repo
 from jinja2 import Environment, FileSystemLoader
 from alignment_pipeline import AlignmentPipeline
-from utilities.api_utils import run_duplicate_check, run_wildebeest_analysis, upload_to_blob_storage
+from utilities.api_utils import (
+    run_duplicate_check,
+    run_wildebeest_analysis,
+    upload_to_blob_storage,
+    DUPLICATE_CHECK_OUTPUT_FILENAME,
+    WILDEBEEST_RESULTS_FILENAME,
+    ALIGNMENT_RESULTS_FILENAME,
+    TGT_SPELLINGS_FILENAME,
+    INDEX_JSON,
+)
 
 
 R2_BUCKET_NAME = "greekroom-results"
@@ -121,19 +130,19 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
     )
     
     # Write HTML file instead of JSON
-    wildebeest_result_path = tempdir_path / "wildebeest-results.html"
+    wildebeest_result_path = tempdir_path / WILDEBEEST_RESULTS_FILENAME
     with open(wildebeest_result_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     logger.info(f"Wildebeest results saved to {wildebeest_result_path}")
     
     # Run duplicate check
-    duplicate_result_path = tempdir_path / "duplicate-check-output.html"
+    duplicate_result_path = tempdir_path / DUPLICATE_CHECK_OUTPUT_FILENAME
     run_duplicate_check(repo_dir, "", "", duplicate_result_path)
     logger.info(f"Duplicate results saved to {duplicate_result_path}")
 
     # Define object keys for R2 storage
-    wildebeest_object_key = f"{user}/{repo}/wildebeest-results.html"
-    duplicate_object_key = f"{user}/{repo}/duplicate-check-output.html"
+    wildebeest_object_key = f"{user}/{repo}/{WILDEBEEST_RESULTS_FILENAME}"
+    duplicate_object_key = f"{user}/{repo}/{DUPLICATE_CHECK_OUTPUT_FILENAME}"
 
     upload_to_blob_storage(
         wildebeest_result_path, 
@@ -164,7 +173,7 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
         Repo.clone_from("https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git", str(source_repo_dir))
         alignment_output_path = run_alignment(source_repo_dir, repo_dir, str(alignment_dir))
 
-        alignment_object_key = f"{user}/{repo}/alignment.zip"
+        alignment_object_key = f"{user}/{repo}/{ALIGNMENT_RESULTS_FILENAME}"
         upload_to_blob_storage(
             alignment_output_path, 
             alignment_object_key,
@@ -191,13 +200,13 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
             index[zip_split.stem] = f"{user}/{repo}/alignments/{zip_split.stem}.zip"
 
         # upload index.json
-        index_json_path = alignment_dir / "index.json"
+        index_json_path = alignment_dir / INDEX_JSON
         with open(index_json_path, 'w') as f:
             json.dump(index, f)
         
         upload_to_blob_storage(
             index_json_path, 
-            f"{user}/{repo}/alignments/index.json",
+            f"{user}/{repo}/alignments/{INDEX_JSON}",
             R2_BUCKET_NAME,
             R2_STORAGE_ENDPOINT,
             R2_ACCESS_KEY_ID,
@@ -206,16 +215,16 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
         )
 
         # upload spell-check result
-        tgt_spelling_file = alignment_dir / "tgt-spellings.html"
+        tgt_spelling_file = alignment_dir / TGT_SPELLINGS_FILENAME
         extract_file_from_zip(
             alignment_output_path, 
-            "tgt-spellings.html",
+            TGT_SPELLINGS_FILENAME,
             tgt_spelling_file
         )
 
         upload_to_blob_storage(
             tgt_spelling_file, 
-            f"{user}/{repo}/tgt-spellings.html",
+            f"{user}/{repo}/{TGT_SPELLINGS_FILENAME}",
             R2_BUCKET_NAME,
             R2_STORAGE_ENDPOINT,
             R2_ACCESS_KEY_ID,

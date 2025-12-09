@@ -24,7 +24,16 @@ from fastapi.templating import Jinja2Templates
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
-from utilities.api_utils import run_usfm_to_json, run_repeated_words, run_wildebeest_analysis
+from utilities.api_utils import (
+    run_usfm_to_json,
+    run_repeated_words,
+    run_wildebeest_analysis,
+    DUPLICATE_CHECK_OUTPUT_FILENAME,
+    WILDEBEEST_RESULTS_FILENAME,
+    ALIGNMENT_RESULTS_FILENAME,
+    TGT_SPELLINGS_FILENAME,
+    INDEX_JSON,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -236,10 +245,10 @@ async def view_results(user: str, repo: str, request: Request):
         raise HTTPException(status_code=500, detail="STORAGE_ENDPOINT not configured")
     
     # Check availability of files via HEAD requests
-    duplicate_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/duplicate-check-output.html"
-    wildebeest_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/wildebeest-results.html"
-    alignment_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignment.zip"
-    tgt_spell_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/tgt-spellings.html"
+    duplicate_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{DUPLICATE_CHECK_OUTPUT_FILENAME}"
+    wildebeest_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{WILDEBEEST_RESULTS_FILENAME}"
+    alignment_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{ALIGNMENT_RESULTS_FILENAME}"
+    tgt_spell_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{TGT_SPELLINGS_FILENAME}"
     
     duplicate_check_available = False
     wildebeest_results_available = False
@@ -326,7 +335,7 @@ def _extract_html_from_zip(zip_file_path: Path, chapter_file: str) -> str | None
 
 def _serve_alignment_html(user: str, repo: str, chapter_file: str) -> HTMLResponse:    
     # Download index.json
-    index_json_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignments/index.json"
+    index_json_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignments/{INDEX_JSON}"
     response = requests.get(index_json_url, timeout=30)
     response.raise_for_status()
     index_json = response.json()
