@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from git import Repo
 from jinja2 import Environment, FileSystemLoader
 from alignment_pipeline import AlignmentPipeline
-from utils import extract_file_from_zip, split_alignment_zip_by_prefix
+from utils import extract_file_from_zip, split_alignment_zip_by_prefix, fetch_source_for_alignment
 from utilities.api_utils import (
     run_duplicate_check,
     run_wildebeest_analysis,
@@ -160,77 +160,79 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
         R2_SECRET_ACCESS_KEY
     )
 
-    wildebeest_result_url = f"{BLOB_OUTPUT_PREFIX}/{wildebeest_object_key}"
-    duplicate_result_url = f"{BLOB_OUTPUT_PREFIX}/{duplicate_object_key}"
-    logger.info(f"Wildebeest result saved to: {wildebeest_result_path}")
-    logger.info(f"Duplicate result saved to: {duplicate_result_path}")
+    logger.info(f"Wildebeest result saved to: {wildebeest_object_key}")
+    logger.info(f"Duplicate result saved to: {duplicate_object_key}")
 
-    if repo != "en_ulb": # only run alignment for repos other than en_ulb
-        alignment_dir = tempdir_path / "alignment"
-        os.makedirs(str(alignment_dir), exist_ok=True)
-        source_repo_dir = tempdir_path / "en_ulb"
-        Repo.clone_from("https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git", str(source_repo_dir))
-        alignment_output_path = run_alignment(source_repo_dir, repo_dir, str(alignment_dir))
+    alignment_dir = tempdir_path / "alignment"
+    os.makedirs(str(alignment_dir), exist_ok=True)
+    # source_repo_dir = tempdir_path / "en_ulb"
+    # Repo.clone_from("https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git", str(source_repo_dir))
+    source_repo_dir = fetch_source_for_alignment(repo_dir, tempdir_path / "source", default_branch)
+    if source_repo_dir is None:
+        logger.error(f"Failed to fetch source for alignment. Skipping alignment for {repo}")
+        return
 
-        alignment_object_key = f"{user}/{repo}/{ALIGNMENT_RESULTS_FILENAME}"
+    alignment_output_path = run_alignment(source_repo_dir, repo_dir, str(alignment_dir))
+
+    alignment_object_key = f"{user}/{repo}/{ALIGNMENT_RESULTS_FILENAME}"
+    upload_to_blob_storage(
+        alignment_output_path, 
+        alignment_object_key,
+        R2_BUCKET_NAME,
+        R2_STORAGE_ENDPOINT,
+        R2_ACCESS_KEY_ID,
+        R2_SECRET_ACCESS_KEY,
+        "application/zip"
+    )
+
+    # Upload splits of the large alignment zip
+    index = {}
+    zip_splits = split_alignment_zip_by_prefix(alignment_output_path, alignment_dir)
+    for zip_split in zip_splits:
         upload_to_blob_storage(
-            alignment_output_path, 
-            alignment_object_key,
+            zip_split, 
+            f"{user}/{repo}/alignments/{zip_split.stem}.zip",
             R2_BUCKET_NAME,
             R2_STORAGE_ENDPOINT,
             R2_ACCESS_KEY_ID,
             R2_SECRET_ACCESS_KEY,
             "application/zip"
         )
+        index[zip_split.stem] = f"{user}/{repo}/alignments/{zip_split.stem}.zip"
 
-        # Upload splits of the large alignment zip
-        index = {}
-        zip_splits = split_alignment_zip_by_prefix(alignment_output_path, alignment_dir)
-        for zip_split in zip_splits:
-            upload_to_blob_storage(
-                zip_split, 
-                f"{user}/{repo}/alignments/{zip_split.stem}.zip",
-                R2_BUCKET_NAME,
-                R2_STORAGE_ENDPOINT,
-                R2_ACCESS_KEY_ID,
-                R2_SECRET_ACCESS_KEY,
-                "application/zip"
-            )
-            index[zip_split.stem] = f"{user}/{repo}/alignments/{zip_split.stem}.zip"
+    # upload index.json
+    index_json_path = alignment_dir / INDEX_JSON
+    with open(index_json_path, 'w') as f:
+        json.dump(index, f)
+    
+    upload_to_blob_storage(
+        index_json_path, 
+        f"{user}/{repo}/alignments/{INDEX_JSON}",
+        R2_BUCKET_NAME,
+        R2_STORAGE_ENDPOINT,
+        R2_ACCESS_KEY_ID,
+        R2_SECRET_ACCESS_KEY,
+        "application/json"
+    )
 
-        # upload index.json
-        index_json_path = alignment_dir / INDEX_JSON
-        with open(index_json_path, 'w') as f:
-            json.dump(index, f)
-        
-        upload_to_blob_storage(
-            index_json_path, 
-            f"{user}/{repo}/alignments/{INDEX_JSON}",
-            R2_BUCKET_NAME,
-            R2_STORAGE_ENDPOINT,
-            R2_ACCESS_KEY_ID,
-            R2_SECRET_ACCESS_KEY,
-            "application/json"
-        )
+    # upload spell-check result
+    tgt_spelling_file = alignment_dir / TGT_SPELLINGS_FILENAME
+    extract_file_from_zip(
+        alignment_output_path, 
+        TGT_SPELLINGS_FILENAME,
+        tgt_spelling_file
+    )
 
-        # upload spell-check result
-        tgt_spelling_file = alignment_dir / TGT_SPELLINGS_FILENAME
-        extract_file_from_zip(
-            alignment_output_path, 
-            TGT_SPELLINGS_FILENAME,
-            tgt_spelling_file
-        )
-
-        upload_to_blob_storage(
-            tgt_spelling_file, 
-            f"{user}/{repo}/{TGT_SPELLINGS_FILENAME}",
-            R2_BUCKET_NAME,
-            R2_STORAGE_ENDPOINT,
-            R2_ACCESS_KEY_ID,
-            R2_SECRET_ACCESS_KEY,
-            "text/html"
-        )
-        logger.info(f"Alignment result saved to {alignment_object_key}")
+    upload_to_blob_storage(
+        tgt_spelling_file, 
+        f"{user}/{repo}/{TGT_SPELLINGS_FILENAME}",
+        R2_BUCKET_NAME,
+        R2_STORAGE_ENDPOINT,
+        R2_ACCESS_KEY_ID,
+        R2_SECRET_ACCESS_KEY,
+        "text/html"
+    )
+    logger.info(f"Alignment result saved to {alignment_object_key}")
 
 
 def run_alignment(source_repo_path: str, target_repo_path: str, temp_dir: str) -> Path:

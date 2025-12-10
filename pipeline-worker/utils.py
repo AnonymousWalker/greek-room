@@ -1,9 +1,12 @@
+import io
 import logging
 import os
 import re
 import zipfile
 from pathlib import Path
 from typing import Dict, List
+import requests
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -64,3 +67,41 @@ def split_alignment_zip_by_prefix(zip_path: Path, output_dir: Path) -> List[Path
     
     logger.info(f"Split alignment zip into {len(zip_splits)} files by prefix")
     return zip_splits
+
+
+def fetch_source_for_alignment(repo_path: Path, output_dir: Path, default_branch: str = "master") -> Path | None:
+    os.makedirs(str(output_dir), exist_ok=True)
+    source_id, source_language, source_version = load_source_from_yaml(repo_path / "manifest.yaml")
+    base_url = f"https://content.bibletranslationtools.org/WA-Catalog/{source_language}_{source_id}"
+    headers = { 'User-Agent': 'btt-writer-greekroom' }
+
+    response = requests.get(f"{base_url}/archive/v{source_version}.zip", headers=headers)
+    # if exists, download the zip file and extract it to the output directory
+    if response.status_code == 200:
+        with zipfile.ZipFile(io.BytesIO(response.content), 'r') as zip_file:
+            zip_file.extractall(output_dir)
+            # return the first item in the output directory as repo root
+            return next(output_dir.iterdir())
+    else:
+        # get the default version from WACS instead
+        response = requests.get(f"{base_url}/archive/{default_branch}.zip", headers=headers)
+        if response.status_code == 200:
+            with zipfile.ZipFile(io.BytesIO(response.content), 'r') as zip_file:
+                zip_file.extractall(output_dir)
+                # return the first item in the output directory as repo root
+                return next(output_dir.iterdir())
+        else:
+            print(f"Failed to fetch source from WACS. Response code: {response.status_code}")
+
+    return None
+
+def load_source_from_yaml(path: str) -> tuple[str, str, str]:
+        with open(path, 'r') as f:
+            manifest = yaml.safe_load(f)
+
+        source = manifest['dublin_core']['source'][0]
+        source_id = source['identifier']
+        source_language = source['language']
+        source_version = source['version']
+
+        return source_id, source_language, source_version
