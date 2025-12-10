@@ -9,18 +9,17 @@ ServiceBusListener._process_message().
 
 import json
 import os
-import re
-import zipfile
 from datetime import datetime
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from git import Repo
 from jinja2 import Environment, FileSystemLoader
 from alignment_pipeline import AlignmentPipeline
+from utils import extract_file_from_zip, split_alignment_zip_by_prefix
 from utilities.api_utils import (
     run_duplicate_check,
     run_wildebeest_analysis,
@@ -240,65 +239,6 @@ def run_alignment(source_repo_path: str, target_repo_path: str, temp_dir: str) -
     output = pipeline.run()
     logger.info(f"Alignment completed.")
     return output
-
-
-def split_alignment_zip_by_prefix(zip_path: Path, output_dir: Path) -> List[Path]:
-    """
-    Split an alignment zip file into multiple zip files grouped by three-letter prefix.
-    The original zip contains files like:
-    - visualization/1CH-001.html
-    - visualization/EXO-002.html
-    
-    This function creates separate zip files for each three-letter prefix (e.g., 1CH, EXO).
-    """
-    os.makedirs(str(output_dir), exist_ok=True)
-    
-    pattern = re.compile(r'visualization/(\w{3})-\d{3}\.html')    
-    prefix_groups: Dict[str, List[tuple]] = {}
-    other_files: List[tuple] = []
-    
-    # Read the original zip and group files by prefix
-    with zipfile.ZipFile(zip_path, 'r') as source_zip:
-        for file_info in source_zip.infolist():
-            filename = file_info.filename
-            match = pattern.match(filename)
-            
-            if match:
-                prefix = match.group(1)
-                if prefix not in prefix_groups:
-                    prefix_groups[prefix] = []
-
-                file_data = source_zip.read(filename)
-                prefix_groups[prefix].append((filename, file_info, file_data))
-    
-    # Create a zip file for each prefix group
-    zip_splits: List[Path] = []
-    
-    for prefix, files in prefix_groups.items():
-        zip_filename = output_dir / f"{prefix}.zip"
-        
-        with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as prefix_zip:
-            # Add all files for this prefix
-            for filename, file_info, file_data in files:
-                prefix_zip.writestr(file_info, file_data)
-            
-            # Also include non-visualization files (e.g., spell-check files) in each prefix zip
-            for filename, file_info, file_data in other_files:
-                prefix_zip.writestr(file_info, file_data)
-        
-        zip_splits.append(zip_filename)
-    
-    logger.info(f"Split alignment zip into {len(zip_splits)} files by prefix")
-    return zip_splits
-
-
-def extract_file_from_zip(zip_path: Path, filename: str, output_path: Path):
-    """Extract a specific file from a zip archive to a target file path."""
-    with zipfile.ZipFile(zip_path, 'r') as zip_file:
-        file_content = zip_file.read(filename)
-        with open(output_path, 'wb') as f:
-            f.write(file_content)
-
 
 if __name__ == "__main__":
     import uvicorn
