@@ -16,12 +16,6 @@
 		"enabled": true
 	},
 	/**
-	 * Scheduled cron trigger to periodically wake the container and keep it alive.
-	 */
-	"triggers": {
-		"crons": ["*/30 * * * *"]
-	},
-	/**
 	 * Container configuration for the Python background listener service.
 	 */
 	"containers": [

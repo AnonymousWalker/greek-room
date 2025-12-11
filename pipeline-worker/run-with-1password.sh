@@ -50,6 +50,7 @@ op run --env-file="$ENV_OP_FILE" -- \
     docker run -d \
     -p 8080:8080 \
     --name pipeline-worker \
+    -e CONTENT_SERVER_URL \
     -e R2_STORAGE_ENDPOINT \
     -e R2_ACCESS_KEY_ID \
     -e R2_SECRET_ACCESS_KEY \

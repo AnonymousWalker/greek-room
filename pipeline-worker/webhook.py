@@ -165,8 +165,6 @@ def run_greekroom_checks(message: Dict[str, Any], tempdir: str):
 
     alignment_dir = tempdir_path / "alignment"
     os.makedirs(str(alignment_dir), exist_ok=True)
-    # source_repo_dir = tempdir_path / "en_ulb"
-    # Repo.clone_from("https://content.bibletranslationtools.org/WA-Catalog/en_ulb.git", str(source_repo_dir))
     source_repo_dir = fetch_source_for_alignment(repo_dir, tempdir_path / "source", default_branch)
     if source_repo_dir is None:
         logger.error(f"Failed to fetch source for alignment. Skipping alignment for {repo}")

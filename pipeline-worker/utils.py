@@ -10,6 +10,8 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+CONTENT_SERVER_URL = os.environ.get("CONTENT_SERVER_URL", "https://content.bibletranslationtools.org/WA-Catalog")
+
 
 def extract_file_from_zip(zip_path: Path, filename: str, output_path: Path):
     """Extract a specific file from a zip archive to a target file path."""
@@ -72,7 +74,7 @@ def split_alignment_zip_by_prefix(zip_path: Path, output_dir: Path) -> List[Path
 def fetch_source_for_alignment(repo_path: Path, output_dir: Path, default_branch: str = "master") -> Path | None:
     os.makedirs(str(output_dir), exist_ok=True)
     source_id, source_language, source_version = load_source_from_yaml(repo_path / "manifest.yaml")
-    base_url = f"https://content.bibletranslationtools.org/WA-Catalog/{source_language}_{source_id}"
+    base_url = f"{CONTENT_SERVER_URL}/{source_language}_{source_id}"
     headers = { 'User-Agent': 'btt-writer-greekroom' }
 
     response = requests.get(f"{base_url}/archive/v{source_version}.zip", headers=headers)

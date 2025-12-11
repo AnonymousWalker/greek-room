@@ -12,6 +12,7 @@ export class PipelineWorkerContainer extends Container<Env> {
 
 	
 	envVars = {
+		CONTENT_SERVER_URL: (env as any).CONTENT_SERVER_URL,
 		SERVICE_BUS_CONNECTION_STRING: (env as any).SERVICE_BUS_CONNECTION_STRING,		
 		R2_STORAGE_ENDPOINT: (env as any).R2_STORAGE_ENDPOINT,
 		R2_ACCESS_KEY_ID: (env as any).R2_ACCESS_KEY_ID,
