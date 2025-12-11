@@ -30,35 +30,41 @@ export default {
 		const container = getContainer(env.PIPELINE_WORKER_CONTAINER, "pipeline-worker");
 		
 		try {
-			// Fetch from the container's health endpoint to wake it up and verify it's running
-			const healthResponse = await container.fetch(new Request("http://container/health"));
+			const url = new URL(request.url);
+			const path = url.pathname;
 			
-			if (healthResponse.ok) {
-				return new Response("Pipeline worker container is running", {
-					status: 200,
-					headers: { "Content-Type": "text/plain" },
+			// Forward webhook requests to the container
+			if (path === "/webhook" && request.method === "POST") {
+				const containerUrl = `http://container/webhook`;
+				const forwardedRequest = new Request(containerUrl, {
+					method: request.method,
+					headers: request.headers,
+					body: request.body,
 				});
-			} else {
-				return new Response("Container health check failed", { status: 503 });
+				
+				return await container.fetch(forwardedRequest);
 			}
+			
+			// Handle health check endpoint
+			if (path === "/health" && request.method === "GET") {
+				const healthResponse = await container.fetch(new Request("http://container/health"));
+				
+				if (healthResponse.ok) {
+					return new Response("Pipeline worker container is running", {
+						status: 200,
+						headers: { "Content-Type": "text/plain" },
+					});
+				} else {
+					return new Response("Container health check failed", { status: 503 });
+				}
+			}
+			
+			// Return 404 for unknown routes
+			return new Response("Not found", { status: 404 });
 		} catch (error) {
-			console.error("Container check failed", error);
+			console.error("Container request failed", error);
 			return new Response("Container error", { status: 500 });
 		}
-	},
-	
-	/**
-	 * Scheduled event handler to periodically wake the container to run the pipeline.
-	 */
-	async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-		const container = getContainer(env.PIPELINE_WORKER_CONTAINER, "pipeline-worker");
-		
-		try {
-			await container.fetch(new Request("http://container/health"));
-			console.log("Container scheduled trigger completed");
-		} catch (error) {
-			console.error("Scheduled trigger failed", error);
-		}
-	},
+	}
 };
 

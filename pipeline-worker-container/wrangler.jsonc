@@ -43,6 +43,8 @@
 			"tag": "v1"
 		}
 	],
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"vars": {
+		"CONTENT_SERVER_URL": "https://content.bibletranslationtools.org/WA-Catalog"
+	}
 }
-
