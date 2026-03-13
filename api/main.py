@@ -8,47 +8,47 @@ This server processes USFM files through two steps:
 """
 
 import json
-import tempfile
-from pathlib import Path
+import logging
+import os
 import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
 from typing import Literal, Optional
-
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+import zipfile
+import requests
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Query, Request
 from fastapi.responses import JSONResponse, HTMLResponse
-from machine.corpora import UsfmFileTextCorpus, extract_scripture_corpus
+from fastapi.templating import Jinja2Templates
 
-PROJECT_ROOT = Path(__file__).parent.parent
-PACKAGE_ROOT = PROJECT_ROOT / "greekroom"
-if str(PACKAGE_ROOT) not in sys.path:
-    sys.path.append(str(PACKAGE_ROOT))
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.append(str(PROJECT_ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
-from greekroom.owl.repeated_words import process_repeated_words  # type: ignore[import]
-from utilities.prep_usfm import convert_usfm_to_vref  # type: ignore[import]
-from wildebeest import wb_analysis  # type: ignore[import]
+from utilities.api_utils import (
+    run_usfm_to_json,
+    run_repeated_words,
+    run_wildebeest_analysis,
+    DUPLICATE_CHECK_OUTPUT_FILENAME,
+    WILDEBEEST_RESULTS_FILENAME,
+    ALIGNMENT_RESULTS_FILENAME,
+    TGT_SPELLINGS_FILENAME,
+    INDEX_JSON,
+)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Setup Jinja2 templates
+BASE_PATH = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(BASE_PATH / "templates"))
+STORAGE_ENDPOINT = os.getenv("STORAGE_ENDPOINT")
 
 app = FastAPI(
     title="Greek Room USFM Conversion API",
     description="API for converting USFM files to JSON/HTML format using repeated words analysis",
     version="1.0.0",
 )
-
-def _build_corpus_from_path(path: Path) -> UsfmFileTextCorpus | None:
-    """Create a Machine corpus from a USFM file or directory."""
-    if not path.exists():
-        raise HTTPException(status_code=400, detail=f"USFM path not found: {path}")
-
-    if path.is_file():
-        parent = path.parent
-        return UsfmFileTextCorpus(parent.resolve(strict=True), file_pattern=path.name)
-
-    if path.is_dir():
-        return UsfmFileTextCorpus(path.resolve(strict=True), file_pattern="*.usfm")
-
-    return None
-
 
 
 @app.get("/")
@@ -70,118 +70,6 @@ async def root():
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}
-
-
-def run_usfm_to_json(
-    usfm_path: Path,
-    lang_code: str,
-    lang_name: str,
-    output_json: Path
-) -> Path:
-    """
-    Convert USFM/SFM content to the JSON format expected by repeated words.
-
-    Args:
-        usfm_file: Path to USFM file or directory
-        lang_code: Language code
-        lang_name: Language name
-        output_json: Path to output JSON file
-
-    Returns:
-        Path to the created JSON file
-
-    Raises:
-        HTTPException: If the conversion fails
-    """
-    output_json.parent.mkdir(parents=True, exist_ok=True)
-
-    corpus = _build_corpus_from_path(usfm_path)
-    if not corpus:
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to create a corpus. Provide a USFM/SFM file or a directory containing USFM files."
-        )
-
-    check_corpus = []
-    try:
-        for verse_text, _, vref in extract_scripture_corpus(corpus):
-            if verse_text is not None and verse_text.strip():
-                check_corpus.append({"snt-id": str(vref), "text": verse_text})
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read USFM content: {exc}")
-
-    json_output = {
-        "jsonrpc": "2.0",
-        "id": lang_name,
-        "method": "BibleTranslationCheck",
-        "params": [{
-            "lang-code": lang_code,
-            "lang-name": lang_name,
-            "project-id": lang_name,
-            "project-name": lang_name,
-            "selectors": [{
-                "tool": "GreekRoom",
-                "checks": ["RepeatedWords"]
-            }],
-            "check-corpus": check_corpus,
-        }],
-    }
-
-    try:
-        with output_json.open("w", encoding="utf-8") as json_file:
-            json.dump(json_output, json_file, ensure_ascii=False, indent=1)
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write JSON output: {exc}")
-
-    return output_json
-
-
-def run_repeated_words(
-    input_json: Path,
-    lang_code: str,
-    lang_name: str,
-    output_json: Optional[Path] = None,
-    output_html: Optional[Path] = None
-) -> tuple[Optional[Path], Optional[Path]]:
-    """
-    Run repeated_words.py to process JSON and generate output.
-
-    Args:
-        input_json: Path to input JSON file
-        lang_code: Language code
-        lang_name: Language name
-        output_json: Optional path to output JSON file
-        output_html: Optional path to output HTML file
-
-    Returns:
-        Tuple of (output_json_path, output_html_path)
-
-    Raises:
-        HTTPException: If the processing fails
-    """
-    if not input_json.exists():
-        raise HTTPException(status_code=400, detail=f"Input JSON file not found: {input_json}")
-
-    out_filename_str = str(output_json) if output_json else None
-    html_filename_str = str(output_html) if output_html else None
-
-    if output_json:
-        output_json.parent.mkdir(parents=True, exist_ok=True)
-    if output_html:
-        output_html.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        process_repeated_words(
-            json_input=str(input_json),
-            lang_code=lang_code,
-            lang_name=lang_name,
-            out_filename=out_filename_str,
-            html_out_filename=html_filename_str
-        )
-        return output_json, output_html
-    except Exception as e:
-        error_msg = f"Repeated words processing failed: {str(e)}"
-        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.post("/check-duplicates")
@@ -234,8 +122,8 @@ async def check_duplicates(
                 lang_name=lang_name,
                 output_json=intermediate_json
             )
-        except HTTPException:
-            raise
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Unexpected error in USFM conversion: {str(e)}")
 
@@ -256,8 +144,8 @@ async def check_duplicates(
                 output_json=output_json_path,
                 output_html=output_html_path
             )
-        except HTTPException:
-            raise
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Unexpected error in repeated words processing: {str(e)}")
 
@@ -291,55 +179,6 @@ async def check_duplicates(
                 raise HTTPException(status_code=500, detail="No output files were created")
 
             return JSONResponse(content=result)
-
-
-def run_wildebeest_analysis(
-    usfm_path: Path,
-    vref_file_path: Optional[Path] = None
-) -> dict:
-    """
-    Run the Wildebeest analysis on the given USFM file and return analysis results.
-
-    Args:
-        usfm_path: Path to USFM file or directory
-        vref_file_path: Optional path to vref.txt file. If not provided, uses default.
-
-    Returns:
-        Dictionary containing the Wildebeest analysis results
-
-    Raises:
-        HTTPException: If the processing fails
-    """
-    # Use default vref.txt path if not provided
-    if vref_file_path is None:
-        vref_file_path = PROJECT_ROOT / "ephesus" / "data" / "vref.txt"
-    
-    if not vref_file_path.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"VREF file not found: {vref_file_path}"
-        )
-
-    try:
-        # Convert USFM to vref format
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            vref_text_path = convert_usfm_to_vref(usfm_path, temp_path)
-            
-            # Load reference IDs
-            ref_id_dict = wb_analysis.load_ref_ids(str(vref_file_path))
-            
-            # Run Wildebeest analysis and get the result object
-            wb = wb_analysis.process(
-                in_file=str(vref_text_path),
-                ref_id_dict=ref_id_dict,
-            )
-            
-            # Return the analysis dictionary
-            return wb.analysis
-    except Exception as e:
-        error_msg = f"Wildebeest analysis failed: {str(e)}"
-        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.post("/wildebeest")
@@ -381,11 +220,152 @@ async def wildebeest_analysis(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to save uploaded file(s): {str(e)}")
 
-        analysis_result = run_wildebeest_analysis(
-            usfm_path=usfm_dir
-        )
+        try:
+            analysis_result, ref_id_dict = run_wildebeest_analysis(
+                usfm_path=usfm_dir
+            )
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Unexpected error in Wildebeest analysis: {str(e)}")
+        
         return JSONResponse(content=analysis_result)
 
+
+@app.get("/view/{user}/{repo}")
+async def view_results(user: str, repo: str, request: Request):
+    """
+    Front end for viewing the results of Greek Room analysis.
+    
+    Args:
+        user: User identifier
+        repo: Repository identifier
+    """
+    if not STORAGE_ENDPOINT:
+        raise HTTPException(status_code=500, detail="STORAGE_ENDPOINT not configured")
+    
+    # Check availability of files via HEAD requests
+    duplicate_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{DUPLICATE_CHECK_OUTPUT_FILENAME}"
+    wildebeest_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{WILDEBEEST_RESULTS_FILENAME}"
+    alignment_results_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{ALIGNMENT_RESULTS_FILENAME}"
+    tgt_spell_check_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/{TGT_SPELLINGS_FILENAME}"
+    
+    duplicate_check_available = False
+    wildebeest_results_available = False
+    alignment_results_available = False
+    tgt_spell_check_available = False
+
+    try:
+        response = requests.head(duplicate_check_url, timeout=5)
+        duplicate_check_available = response.status_code == 200
+
+        response = requests.head(wildebeest_results_url, timeout=5)
+        wildebeest_results_available = response.status_code == 200
+
+        response = requests.head(alignment_results_url, timeout=5)
+        alignment_results_available = response.status_code == 200
+
+        response = requests.head(tgt_spell_check_url, timeout=5)
+        tgt_spell_check_available = response.status_code == 200
+
+    except Exception as e:
+        logger.warning(f"HEAD request failed for one or more resources: {e}")
+    
+    return templates.TemplateResponse(
+        "landing.html",
+        {
+            "request": request,
+            "user": user,
+            "repo": repo,
+            "duplicate_check_available": duplicate_check_available,
+            "wildebeest_results_available": wildebeest_results_available,
+            "duplicate_check_url": duplicate_check_url,
+            "wildebeest_results_url": wildebeest_results_url,
+            "alignment_results_available": alignment_results_available,
+            "alignment_results_url": f"/view/{user}/{repo}/alignment/default",
+            "tgt_spell_check_available": tgt_spell_check_available,
+            "tgt_spell_check_url": tgt_spell_check_url,
+        }
+    )
+
+
+@app.get("/view/{user}/{repo}/alignment/{chapter_file}")
+def view_alignment_results(user: str, repo: str, chapter_file: str, request: Request):
+    """
+    View alignment results. Default chapter should be requested as /alignment/default.
+    Example chapter_file: "GEN-001.html"
+    """
+    return _serve_alignment_html(user, repo, chapter_file)
+
+
+def _extract_html_from_zip(zip_file_path: Path, chapter_file: str) -> str | None:
+    """
+    Extract an HTML file from a zip archive on disk.
+    
+    Args:
+        zip_file_path: Path to the zip file
+        chapter_file: The name of the chapter file to extract (e.g., "GEN-001.html").
+    """
+    try:
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_file:
+            if not chapter_file or chapter_file == "default":
+                # pick any HTML file under visualization/
+                file_path = next(
+                    (
+                        name for name in zip_file.namelist()
+                        if name.startswith("visualization/") and (
+                            name.lower().endswith("001.html") or name.lower().endswith(".html")
+                        )
+                    ),
+                    None
+                )
+                if not file_path:
+                    return None
+            else:
+                file_path = f"visualization/{chapter_file}"
+                if file_path not in zip_file.namelist():
+                    return None
+            
+            return zip_file.read(file_path).decode('utf-8')
+
+    except Exception as e:
+        logger.error(f"Error extracting HTML from zip: {e}", exc_info=True)
+        return None
+
+
+def _serve_alignment_html(user: str, repo: str, chapter_file: str) -> HTMLResponse:    
+    # Download index.json
+    index_json_url = f"{STORAGE_ENDPOINT}/{user}/{repo}/alignments/{INDEX_JSON}"
+    response = requests.get(index_json_url, timeout=30)
+    response.raise_for_status()
+    index_json = response.json()
+
+    if chapter_file == "default":
+        # default to the first entry in index.json
+        alignment_file_object_key = next(iter(index_json.values()))
+    else:
+        # get the book zip file from index
+        book_id = chapter_file.split("-")[0]
+        alignment_file_object_key = index_json[book_id]
+    
+    alignment_results_url = f"{STORAGE_ENDPOINT}/{alignment_file_object_key}"
+    
+    response = requests.get(alignment_results_url, timeout=10)
+    response.raise_for_status()
+
+    # Download zip to temporary file
+    with tempfile.NamedTemporaryFile(delete=True, suffix='.zip') as temp_zip:
+        temp_zip.write(response.content)
+        temp_zip_path = Path(temp_zip.name)
+
+        html_content = _extract_html_from_zip(temp_zip_path, chapter_file)
+        
+        if html_content is None:
+            raise HTTPException(status_code=404, detail="Chapter HTML not found in alignment zip")
+
+        return HTMLResponse(content=html_content)
+
+    
 
 if __name__ == "__main__":
     import uvicorn

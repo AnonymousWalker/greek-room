@@ -1,22 +1,84 @@
-# Ignore everything by default
-**
+# Python cache and compiled files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
 
-# Allow FastAPI app and dependencies
-!api
-!api/**
-!greekroom
-!greekroom/**
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Allow utilities needed by FastAPI
-!utilities
-!utilities/**
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.virtual/
 
-# Allow ephesus/data for vref.txt
-!ephesus
-!ephesus/data
+# Testing and coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.hypothesis/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation and site builds
+site/public/
+site/themes/
+.hugo_build.lock
+
+# Node modules (for container builds)
+**/node_modules/
+
+# Data directories that shouldn't be in image
+# Exclude ephesus/data but allow vref.txt (needed for wildebeest analysis)
+ephesus/data/**
 !ephesus/data/vref.txt
 
-# Allow licensing/docs if needed at runtime
-!LICENSE
-!README.md
+# Temporary files
+*.log
+*.tmp
+test.html
 
+# Project-specific directories not needed for pipeline-worker
+api-worker-container/
+pipeline-worker-container/
+cli/
+core/
+site/

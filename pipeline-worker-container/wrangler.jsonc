@@ -1,0 +1,50 @@
+/**
+ * Cloudflare Worker configuration for pipeline-worker background service.
+ * 
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "greekroom-pipeline-worker",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-10-08",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	/**
+	 * Container configuration for the Python background listener service.
+	 */
+	"containers": [
+		{
+			"class_name": "PipelineWorkerContainer",
+			"image": "../pipeline-worker/Dockerfile",
+			"image_build_context": "..",
+			"instance_type": "standard-1",
+			"max_instances": 1
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "PipelineWorkerContainer",
+				"name": "PIPELINE_WORKER_CONTAINER"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"new_sqlite_classes": [
+				"PipelineWorkerContainer"
+			],
+			"tag": "v1"
+		}
+	],
+	"upload_source_maps": true,
+	"vars": {
+		"CONTENT_SERVER_URL": "https://content.bibletranslationtools.org/WA-Catalog"
+	}
+}

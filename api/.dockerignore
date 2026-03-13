@@ -1,0 +1,22 @@
+# Ignore everything by default
+**
+
+# Allow FastAPI app and dependencies
+!api
+!api/**
+!greekroom
+!greekroom/**
+
+# Allow utilities
+!utilities
+!utilities/**
+
+# Allow ephesus/data for vref.txt
+!ephesus
+!ephesus/data
+!ephesus/data/vref.txt
+
+# Allow licensing/docs if needed at runtime
+!LICENSE
+!README.md
+

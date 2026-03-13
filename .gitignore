@@ -166,3 +166,5 @@ ephesus.db
 ephesus/data/
 ephesus/.virtual/
 .virtual/
+
+pipeline-worker-container/node_modules/
