@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 from __future__ import annotations
+import io
 import json
+import math
 from pathlib import Path
 import os
 import regex
@@ -20,8 +22,62 @@ def slot_value_in_double_colon_del_list(line: str, slot: str, default: Optional 
         return default
 
 
-# cwd_path = Path(os.getcwd())
+def slot_value_in_single_colon_del_list(line: str, slot: str, default: Optional = None) -> str:
+    """For a given slot, e.g. 'cost', get its value from a line such as ':s1 of course :s2 :cost 0.3' -> 0.3
+    The value can be an empty string, as for :s2 in the example above."""
+    if m := regex.match(fr'(?:.*\s)?:{slot}(|\s+\S.*?)(?:\s+:\S.*|\s*)$', line):
+        result = m.group(1).strip()
+        result = result.strip('"')
+        return result
+    else:
+        return default
+
+
+def slot_values_in_double_colon_del_list(line: str, slot: str, default: Optional = None) -> List[str]:
+    """For a given slot, e.g. 'cost', get its values from a line such as '::form :tense present ::form :tense past'
+    """
+    return regex.findall(fr'::{slot}\s+(\S.*?\S|\S)(?=\s+::\S|\s*$)', line)
+
+
+def forms_in_double_colon_list(line: str) -> List[dict]:
+    result = []
+    for form in slot_values_in_double_colon_del_list(line, 'FORM'):
+        form_dict = {}
+        for form_slot in ("TENSE", "NUMBER", "PERSON", "REF-NUMBER", "REF-PERSON", "REF-GENDER", "GRADE"):
+            if slot_value := slot_value_in_single_colon_del_list(form, form_slot):
+                form_dict[form_slot] = slot_value
+        result.append(form_dict)
+    return result
+
+
+def valid_offset(lst: list, offset: int) -> bool:
+    return isinstance(lst, list) and isinstance(offset, int) and (0 <= offset < len(lst))
+
+
+cwd_path = Path(os.getcwd())
 # parent_dir = cwd_path.parent
+
+
+def full_filename(file: str | io.TextIOWrapper, default_dirs: list | None = None, must_exist: bool = False) -> str:
+    if isinstance(file, io.TextIOWrapper):
+        filename = file.name
+    elif isinstance(file, str):
+        filename = file
+    else:
+        filename = str(file)
+    if filename.startswith("/"):
+        return filename
+    if default_dirs:
+        for default_dir in default_dirs:
+            full_filename_s = f"{default_dir}/{filename}"
+            if must_exist:
+                if os.path.exists(full_filename_s):
+                    return full_filename_s
+            else:
+                return full_filename_s
+    return f"{cwd_path}/{filename}"
+
+
 def find_file(filename: str | Path, dirs: List[str | Path]) -> Path | None:
     if os.path.exists(filename):
         return filename if isinstance(filename, Path) else Path(filename)
@@ -32,6 +88,18 @@ def find_file(filename: str | Path, dirs: List[str | Path]) -> Path | None:
             if os.path.exists(full_filename):
                 return full_filename
     return None
+
+
+def mkdirs_in_path(filename: str | Path):
+    if isinstance(filename, Path):
+        filename = str(filename)
+    if not filename.startswith('/'):
+        path_elements = filename.split('/')
+        for path_len in range(1, len(path_elements)):
+            partial_path = '/'.join(path_elements[0:path_len])
+            if (not os.path.isdir(partial_path)) and (not os.path.isfile(partial_path)):
+                sys.stderr.write(f"Making directory {partial_path}\n")  # maybe just temporary?
+                os.mkdir(partial_path, mode=0o775)
 
 
 def standard_data_dirs() -> List[str]:
@@ -49,11 +117,47 @@ def standard_data_dirs() -> List[str]:
     return result
 
 
+def absolute_path(path: str) -> str:
+    return path if path.startswith("/") else f"{Path(os.path.abspath(os.getcwd()))}/{path}"
+
+
+def pmi(a_count: float, b_count: float, ab_count: float, total_count: float, smoothing: float = 1.0) -> float:
+    if a_count == 0 or b_count == 0 or total_count == 0:
+        return 0
+    else:
+        p_a = a_count / total_count
+        p_b = b_count / total_count
+        expected_ab = p_a * p_b * total_count
+        if expected_ab == 0 and smoothing == 0:
+            return -99
+        else:
+            return math.log((ab_count + smoothing) / (expected_ab + smoothing))
+
+
+def pmi_list(item_counts: List[float], combined_count: float, total_count: float, smoothing: float = 1.0,
+             verbose: bool = False) -> float:
+    if (0 in item_counts) or total_count == 0:
+        return 0
+    else:
+        expected_count = total_count
+        for item_count in item_counts:
+            expected_count *= item_count / total_count
+        if expected_count == 0 and smoothing == 0:
+            return -99
+        else:
+            if verbose:
+                sys.stderr.write(f'  PMI {item_counts}; {combined_count}; {total_count}: {expected_count}'
+                                 f' -> {(combined_count + smoothing) / (expected_count + smoothing)}'
+                                 f' -> {math.log((combined_count + smoothing) / (expected_count + smoothing))}\n')
+            return math.log((combined_count + smoothing) / (expected_count + smoothing))
+
+
 def findall3(match_regex: str, text: str) -> Tuple[List[str], List[int], List[str]]:
-    """returns matches, inter-matches, start-positions, inter-matches (len(matches)+1)"""
+    """returns matches, start-positions, inter-matches (len(matches)+1)"""
     full_regex = '(.*?)(' + match_regex + ')(.*)$'
     matches, start_positions, inter_matches = [], [], []
     rest, position = text, 0
+    # sys.stderr.write(f'Findall3: {full_regex} :: {rest}\n')
     while m := regex.match(full_regex, rest):
         pre, core, rest = m.group(1, 2, 3)
         position += len(pre)

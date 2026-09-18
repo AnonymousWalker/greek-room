@@ -18,11 +18,14 @@ import regex
 import string
 import sys
 from typing import Any, Dict, List, Tuple
+from greekroom import __version__ as __greekRoomVersion__
 from greekroom.gr_utilities import general_util, html_util
+from greekroom.versification.versification import BackVersification
 
 
 def legit_dupl_data_filenames(verbose: bool = False) -> List[str]:
-    """find data files that list legitimate repeated words, both system and user defined"""
+    """Returns a list of data files that list legitimate repeated words,
+    checking for both system and potential user defined files."""
     result = []
     if owl_dir := os.path.dirname(os.path.realpath(__file__)):
         if verbose:
@@ -44,7 +47,7 @@ def legit_dupl_data_filenames(verbose: bool = False) -> List[str]:
 
 def read_legitimate_duplicate_data(filename: Path, d: dict, lang_code_restriction: str | None = None, 
                                    verbose: bool = False) -> None:
-    """read in data files of legitimate repeated words"""
+    """Reads legitimate repeated words from data file 'filename', collecting them in dictionary 'd'."""
     with open(filename) as f_in:
         line_number = 0
         n_entries = 0
@@ -98,7 +101,7 @@ def read_legitimate_duplicate_data(filename: Path, d: dict, lang_code_restrictio
 
 
 def markup_duplicate_words(s: str, duplicate_words: str, color: str) -> str:
-    """mark up string with color, typically green (known to be legitimate repeated word), red otherwise"""
+    """Marks up a string with color, typically green (known to be legitimate repeated word), red otherwise"""
     duplicate_word = regex.sub(r'(?:\pZ|\pC).*', '', duplicate_words)
     s = regex.sub(rf'\b({duplicate_word}(?:(?:\pZ|\pC)+{duplicate_word})+)\b',
                   rf'<span style="color:{color};">\1</span>',
@@ -107,9 +110,9 @@ def markup_duplicate_words(s: str, duplicate_words: str, color: str) -> str:
 
 
 def check_for_repeated_words_in_line(line: str, snt_id: str, lang_code: str,
-                                     repeated_word_list: List[dict], misc_data_dict: dict) \
+                                     repeated_word_list: List[dict], misc_data_dict: dict, gr_format: str) \
         -> None:
-    """identifies repeated words in a given line and adds result to corpus-wide list of repeated word entries"""
+    """Identifies repeated words in a given line of text and adds result to corpus-wide list of repeated word entries"""
     if line:
         line_lc = line.rstrip().lower()
         words, start_positions, inter_words \
@@ -121,12 +124,22 @@ def check_for_repeated_words_in_line(line: str, snt_id: str, lang_code: str,
                 surf = line[start_positions[i]:start_positions[i + 1] + len(words[i + 1])]
                 legit_dupl_dict = misc_data_dict.get((lang_code, 'legitimate-duplicate', repeated_word))
                 severity = 0.1 if legit_dupl_dict else 0.5
-                repeated_word_list.append({"snt-id": snt_id,
-                                           "repeated-word": repeated_word,
-                                           "surf": surf,
-                                           "start-position": start_positions[i],
-                                           "legitimate": bool(legit_dupl_dict),
-                                           "severity": severity})
+                span = [[start_positions[i], start_positions[i]+len(surf)]]
+                if gr_format == "0.0.1":
+                    repeated_word_list.append({"snt-id": snt_id,
+                                               "repeated-word": repeated_word,
+                                               "surf": surf,
+                                               "start-position": start_positions[i],
+                                               "legitimate": bool(legit_dupl_dict),
+                                               "severity": severity})
+                else:
+                    repeated_word_list.append({"sntId": snt_id,
+                                               "span": span,
+                                               "orig": surf,
+                                               "repeatedWord": repeated_word,
+                                               "check": "GreekRoom:Owl:RepeatedWords",
+                                               "legitimate": bool(legit_dupl_dict),
+                                               "severity": severity})
 
 
 def new_corpus(corpus_id: str | None = None) -> general_util.Corpus:
@@ -135,30 +148,48 @@ def new_corpus(corpus_id: str | None = None) -> general_util.Corpus:
 
 def check_for_repeated_words(param_d: dict, data_filename_dict: Dict[str, List[str]],
                              corpus: general_util.Corpus | None = None, verbose: bool = False) \
-        -> Tuple[dict, dict, dict]:
-    """Input object to result object, error object, data dict
-    snt_id2snt stores text (needed for HTML output)"""
+        -> Tuple[dict, dict, dict, str | None, str | None]:
+    """Input: (1) param_d object contains language code, 'check-corpus': any sub-corpus to be checked
+              (2) data_filename_dict contains data files of legitimate repeated words
+              (3) corpus is a dictionary of sentences indexed by sentence/verse ID;
+                  used unless param_d specifies another corpus (usually a sub-corpus)
+       Output: a tuple consisting of
+              (1) result (dictionary)
+              (2) error (dictionary; empty for now)
+              (3) misc_data_dict (dictionary) with info regarding repeated words"""
     misc_data_dict = {}
-    lang_code = param_d.get("lang-code")
-    check_corpus = param_d.get("check-corpus")
     for data_filename in data_filename_dict.get("repeated-words"):
         read_legitimate_duplicate_data(Path(data_filename), misc_data_dict, None, verbose)
     repeated_word_list = []
+    gr_format, lang_code = None, None
+    if check_corpus := param_d.get("check-corpus"):
+        gr_format = "0.0.1"
+        lang_code = param_d.get("lang-code")
+        # ...
+    elif corpus_d := param_d.get("corpus"):
+        if check_corpus := corpus_d.get("body"):
+            gr_format = "0.0.4"
+            lang_code = corpus_d.get("langCode")
+    # sys.stderr.write(f"GreekRoomFormat: {gr_format}\n")
     if check_corpus:
         for corpus_entry in check_corpus:
             snt = corpus_entry.get("text", "")
-            snt_id = corpus_entry.get("snt-id", "").rstrip()
-            check_for_repeated_words_in_line(snt, snt_id, lang_code, repeated_word_list, misc_data_dict)
+            snt_id_kw = "snt-id" if (gr_format == "0.0.1") else "sntId"
+            snt_id = corpus_entry.get(snt_id_kw, "").rstrip()
+            check_for_repeated_words_in_line(snt, snt_id, lang_code, repeated_word_list, misc_data_dict, gr_format)
     elif corpus:
         for snt_id in corpus.get_snt_ids():
             snt = corpus.lookup_snt(snt_id)
-            check_for_repeated_words_in_line(snt, snt_id, lang_code, repeated_word_list, misc_data_dict)
-    result = {"tool": "GreekRoom", "checks": [{"check": "RepeatedWords", "feedback": repeated_word_list}]}
+            check_for_repeated_words_in_line(snt, snt_id, lang_code, repeated_word_list, misc_data_dict, gr_format)
+    if gr_format == "0.0.1":
+        result = {"tool": "GreekRoom", "checks": [{"check": "RepeatedWords", "feedback": repeated_word_list}]}
+    else:
+        result = repeated_word_list
     error = {}
     if verbose:
         sys.stderr.write(f"DFD: {data_filename_dict.get('repeated-words')}\n")
         sys.stderr.write(f"MDD: {misc_data_dict}\n")
-    return result, error, misc_data_dict
+    return result, error, misc_data_dict, lang_code, gr_format
 
 
 def check_mcp(mcp_request: str, data_filename_dict: dict, corpus: general_util.Corpus, verbose: bool = False) \
@@ -179,14 +210,24 @@ def check_mcp(mcp_request: str, data_filename_dict: dict, corpus: general_util.C
     params = load_d.get("params")
     param_d = params[0]
     check_corpus_list = param_d.get("check-corpus")
-    lang_code = param_d.get("lang-code")
-    result_d, error_d, misc_data_dict = check_for_repeated_words(param_d, data_filename_dict, corpus, verbose)
+    result, error_d, misc_data_dict, lang_code, gr_format \
+        = check_for_repeated_words(param_d, data_filename_dict, corpus, verbose)
     result_timestamp = datetime.datetime.now().replace(microsecond=0).isoformat()
-    return_object = {"jsonrpc": "2.0", "id": message_id, "result-timestamp": result_timestamp, "lang-code": lang_code}
-    if result_d:
-        return_object["result"] = [result_d]
+    lc_kw = "lang-code" if (gr_format == "0.0.1") else "corpusLangCode"
+    timestamp_kw = "result-timestamp" if (gr_format == "0.0.1") else "resultTimestamp"
+    result_value = [result] if isinstance(result, dict) else result
+    return_object = {"jsonrpc": "2.0", "id": message_id, timestamp_kw: result_timestamp, lc_kw: lang_code}
+    if result:
+        return_object["result"] = result_value
     if error_d:
         return_object["error"] = [error_d]
+    version = {}
+    if __greekRoomVersion__:
+        version['GreekRoom'] = __greekRoomVersion__
+    if gr_format:
+        version['GreekRoomFormat'] = gr_format
+    if version:
+        return_object['version'] = version
     return return_object, misc_data_dict, check_corpus_list
 
 
@@ -204,6 +245,8 @@ def get_feedback(output_d: dict, tool: str, check: str) -> List[dict] | None:
 
 def write_to_html(feedback: list, misc_data_dict: dict, corpus: general_util.Corpus, html_out_filename: str,
                   lang_code: str, lang_name: str | None = None, project_id: str | None = None) -> None:
+    """This function writes out the results collected in feedback to file html_out_filename
+    in human-friendly HTML format."""
     if lang_name is None:
         lang_name = lang_code
     if project_id is None:
@@ -222,8 +265,7 @@ def write_to_html(feedback: list, misc_data_dict: dict, corpus: general_util.Cor
             marked_up_verse = (f"{snt[:start_position]}"
                                f"<span style='color:{color};'>{snt[start_position:end_position]}</span>"
                                f"{snt[end_position:]}")
-            # store tuple of (snt_id, marked_up_verse) so we can display the reference
-            repeated_word_dict[repeated_word].append((snt_id, marked_up_verse))
+            repeated_word_dict[repeated_word].append(marked_up_verse)
             n_repeated_words += 1
     with open(html_out_filename, 'w') as f_html:
         date = f"{datetime.datetime.now():%B %-d, %Y at %-H:%M}"
@@ -259,9 +301,9 @@ def write_to_html(feedback: list, misc_data_dict: dict, corpus: general_util.Cor
                 duplicate2 = duplicate
             n_instances = len(repeated_word_dict[duplicate])
             f_html.write(f"<li> {duplicate2} ({n_instances})\n   <ul>\n")
-            for snt_id_vref, marked_up_verse in repeated_word_dict[duplicate]:
-                # show the snt_id (often a verse reference) before the marked-up verse
-                f_html.write(f"    <li> <nobr>[{html_util.html_title_guard(snt_id_vref)}]</nobr> {marked_up_verse}\n")
+            for marked_up_verse in repeated_word_dict[duplicate]:
+                # sys.stderr.write(f"RWD d:{duplicate} m:{marked_up_verse} \n")
+                f_html.write(f"    <li> {marked_up_verse}\n")
             f_html.write("    </ul>\n")
         f_html.write("</ul>\n")
         html_util.print_html_foot(f_html)
@@ -272,10 +314,10 @@ def write_to_html(feedback: list, misc_data_dict: dict, corpus: general_util.Cor
         sys.stderr.write(f"Wrote HTML to {full_html_output_filename}\n")
 
 
-def load_data_filename(explicit_date_filenames: List[str] | None = None, verbose: bool = False) -> dict:
+def load_data_filename(explicit_data_filenames: List[str] | None = None, verbose: bool = False) -> dict:
     data_filename_dict = defaultdict(list)
     repeated_words_data_filenames = data_filename_dict["repeated-words"]
-    data_filenames = explicit_date_filenames or legit_dupl_data_filenames(verbose)
+    data_filenames = explicit_data_filenames or legit_dupl_data_filenames(verbose)
     for data_filename in data_filenames:
         if data_filename not in repeated_words_data_filenames:
             repeated_words_data_filenames.append(data_filename)
@@ -283,11 +325,24 @@ def load_data_filename(explicit_date_filenames: List[str] | None = None, verbose
 
 
 def update_corpus_if_empty(corpus: general_util.Corpus, check_corpus_list: List[dict]) -> general_util.Corpus:
+    sys.stderr.write(f"check_corpus_list: {check_corpus_list}\n")
     corpus_id = corpus.corpus_id if corpus else None
     if (corpus is None) or (not corpus.snt_id2snt.keys()) and check_corpus_list:
         corpus = new_corpus(corpus_id)
         corpus.load_corpus_from_in_dict(check_corpus_list)
     return corpus
+
+
+def dyn_json_pretty_print(s: str) -> str:
+    """duplicate of wb_analysis.py"""
+    s = regex.sub(r'({"sntId":)', r'\n  \1', s)
+    s = regex.sub(r'("check":)', r'\n     \1', s)
+    s = regex.sub(r'("scripts":)', r'\n       \1', s)
+    s = regex.sub(r'("actionMenu":)', r'\n     \1', s)
+    s = regex.sub(r'(?<=, )({"substitute":)', r'\n                    \1', s)
+    s = regex.sub(r'("version":)', r'\n \1', s)
+    s = regex.sub(r'("skippedChecks":)', r'\n \1', s)
+    return s
 
 
 def process_repeated_words(
@@ -339,10 +394,16 @@ def process_repeated_words(
     mcp_d, misc_data_dict, check_corpus_list = check_mcp(task_s, data_filename_dict, corpus, verbose)
     feedback_list = get_feedback(mcp_d, 'GreekRoom', 'RepeatedWords') or []
 
+    if verbose:
+        if len(feedback_list) > 100:
+            sys.stderr.write(f"Output: {len(feedback_list)} entries\n")
+        else:
+            sys.stderr.write(f"Output: {json.dumps(mcp_d)}\n")
+
     if out_filename:
         try:
             with open(out_filename, 'w') as f_out:
-                f_out.write(f"{json.dumps(mcp_d)}\n")
+                f_out.write(f"{dyn_json_pretty_print(json.dumps(mcp_d))}\n")
         except IOError:
             sys.stderr.write(f"Cannot write JSON output to {out_filename}\n")
 
@@ -353,7 +414,7 @@ def process_repeated_words(
             raise ValueError("Corpus data is required to render HTML output")
         if corpus is None:
             raise ValueError("Corpus data is required to render HTML output")
-        lang_code_for_html = mcp_d.get("lang-code") or lang_code
+        lang_code_for_html = mcp_d.get("lang-code") or mcp_d.get("corpusLangCode") or lang_code
         write_to_html(
             feedback_list,
             misc_data_dict,
@@ -381,7 +442,13 @@ def main():
     parser.add_argument('--message_id', type=str, default=None)
     parser.add_argument('-d', '--data_filenames', default=None)
     parser.add_argument('--verbose', action='count', default=0)
+    parser.add_argument('--back_versification', type=str, default=None)
     args = parser.parse_args()
+
+    # dynamic default for back_versification file
+    default_versification_filename = 'vers/back_versification.json'
+    if (args.back_versification is None) and os.path.exists(default_versification_filename):
+        args.back_versification = default_versification_filename
 
     verbose = args.verbose
     message_id, lang_code, lang_name, project_name = args.message_id, args.lang_code, args.lang_name, args.project_name
@@ -389,6 +456,7 @@ def main():
     json_out_filename = args.out_filename
     corpus = None
     task_s = None
+    bv = BackVersification(args.back_versification, bool(args.back_versification))
     if args.json and isinstance(args.json, str):
         if os.path.exists(args.json):
             with open(args.json) as f_in:
@@ -430,6 +498,7 @@ def main():
         corpus=corpus,
         verbose=verbose
     )
+    sys.stderr.write(bv.report_stats("owl/repeated_words.py"))
 
 
 if __name__ == "__main__":
