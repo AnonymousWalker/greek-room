@@ -21,7 +21,7 @@ import requests
 from jinja2 import Environment, FileSystemLoader
 
 from azure.servicebus import ServiceBusMessage
-from azure.servicebus.aio import ServiceBusClient
+from azure.servicebus.aio import AutoLockRenewer, ServiceBusClient
 from azure.servicebus.exceptions import ServiceBusError
 
 from utilities.api_utils import run_duplicate_check, run_wildebeest_analysis, upload_to_blob_storage
@@ -35,6 +35,8 @@ R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
 BLOB_OUTPUT_PREFIX = os.getenv("BLOB_OUTPUT_PREFIX")
 RESULT_TOPIC = "GreekRoomResult"
+# Processing takes 15-20 minutes; renew the message lock well past that.
+MAX_LOCK_RENEWAL_SECONDS = 60 * 60
 
 if not R2_STORAGE_ENDPOINT or not R2_ACCESS_KEY_ID or not R2_SECRET_ACCESS_KEY:
     raise ValueError("Some R2 environment variables are missing")
@@ -100,10 +102,14 @@ class ServiceBusListener:
             try:
                 async with ServiceBusClient.from_connection_string(
                     conn_str=self.connection_string
-                ) as client:
+                ) as client, AutoLockRenewer(
+                    max_lock_renewal_duration=MAX_LOCK_RENEWAL_SECONDS,
+                    on_lock_renew_failure=self._on_lock_renew_failure,
+                ) as lock_renewer:
                     async with client.get_subscription_receiver(
                         topic_name=self.topic_name,
-                        subscription_name=self.subscription_name
+                        subscription_name=self.subscription_name,
+                        auto_lock_renewer=lock_renewer,
                     ) as receiver:
                         logger.info("Service Bus listener connected and ready to receive messages")
                         
@@ -126,8 +132,13 @@ class ServiceBusListener:
                                     )
                                 continue
 
-                            await receiver.complete_message(message)
-                            logger.info(f"Completed message {message.message_id}")
+                            try:
+                                await receiver.complete_message(message)
+                                logger.info(f"Completed message {message.message_id}")
+                            except ServiceBusError as complete_error:
+                                logger.error(
+                                    f"Failed to complete message {message.message_id}: {complete_error}"
+                                )
 
 
             except ServiceBusError as e:
@@ -142,6 +153,11 @@ class ServiceBusListener:
                 if self._running:
                     logger.error(f"Error connecting to Service Bus: {e}")
                     await asyncio.sleep(10)  # Wait longer before reconnecting
+
+    async def _on_lock_renew_failure(self, message, error):
+        logger.error(
+            f"Lost lock on message {message.message_id}; it may be redelivered to another worker: {error}"
+        )
 
     async def _process_message(self, message, client):
         """
@@ -192,8 +208,11 @@ class ServiceBusListener:
                     await asyncio.to_thread(download_repo)
                     
                     # Extract the zip file
-                    with zipfile.ZipFile(download_path) as repo_zip:
-                        repo_zip.extractall(tempdir)
+                    def extract_repo():
+                        with zipfile.ZipFile(download_path) as repo_zip:
+                            repo_zip.extractall(tempdir)
+
+                    await asyncio.to_thread(extract_repo)
                                         
                     # Find the first folder inside the extracted path
                     tempdir_path = Path(tempdir)
@@ -203,7 +222,9 @@ class ServiceBusListener:
                     repo_dir = dirs[0]
                     
                     # Run Wildebeest analysis
-                    wildebeest_results, ref_id_dict = run_wildebeest_analysis(repo_dir)
+                    wildebeest_results, ref_id_dict = await asyncio.to_thread(
+                        run_wildebeest_analysis, repo_dir
+                    )
                     
                     # Render HTML template
                     template_dir = Path(__file__).parent
@@ -225,23 +246,27 @@ class ServiceBusListener:
                     
                     # Run duplicate check
                     duplicate_result_path = tempdir_path / "duplicate-check-output.html"
-                    run_duplicate_check(repo_dir, "", "", duplicate_result_path)
+                    await asyncio.to_thread(
+                        run_duplicate_check, repo_dir, "", "", duplicate_result_path
+                    )
                     logger.info(f"Duplicate results saved to {duplicate_result_path}")
 
                     # Define object keys for R2 storage
                     wildebeest_object_key = f"{user}/{repo}/wildebeest-results.html"
                     duplicate_object_key = f"{user}/{repo}/duplicate-check-output.html"
 
-                    upload_to_blob_storage(
-                        wildebeest_result_path, 
+                    await asyncio.to_thread(
+                        upload_to_blob_storage,
+                        wildebeest_result_path,
                         wildebeest_object_key,
                         R2_BUCKET_NAME,
                         R2_STORAGE_ENDPOINT,
                         R2_ACCESS_KEY_ID,
                         R2_SECRET_ACCESS_KEY
                     )
-                    upload_to_blob_storage(
-                        duplicate_result_path, 
+                    await asyncio.to_thread(
+                        upload_to_blob_storage,
+                        duplicate_result_path,
                         duplicate_object_key,
                         R2_BUCKET_NAME,
                         R2_STORAGE_ENDPOINT,
