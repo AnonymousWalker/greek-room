@@ -113,13 +113,21 @@ class ServiceBusListener:
                                 break
                             
                             try:
-                                # Process the message
                                 await self._process_message(message, client)
-                                # Complete the message to remove it from the subscription
                             except Exception as e:
-                                logger.error(f"Error processing message {message.message_id}: {e}")
-                            finally:
-                                await receiver.complete_message(message)
+                                logger.error(
+                                    f"Error processing message {message.message_id}, abandoning: {e}"
+                                )
+                                try:
+                                    await receiver.abandon_message(message)
+                                except ServiceBusError as abandon_error:
+                                    logger.error(
+                                        f"Failed to abandon message {message.message_id}: {abandon_error}"
+                                    )
+                                continue
+
+                            await receiver.complete_message(message)
+                            logger.info(f"Completed message {message.message_id}")
 
 
             except ServiceBusError as e:
